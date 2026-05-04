@@ -1,6 +1,7 @@
 """scavenger hunt game where printed barcodes are linked to questions from a grok API call and are integrated into a CLI game"""
 
 from datetime import date
+from utils import get_unique_alpha_response, get_valid_response
 
 sample_question_bank = {
     1: {"question": "How many legs does an Octupus have?", "answer": "8", "player": "Stella"},
@@ -16,111 +17,47 @@ CATEGORY = "category"
 NEW_GAME_CHOICES = {"y": "yes", "n": "no"}
 YES = "y"
 NO = "n"
-MAX_PLAYERS = 100
-MAX_AGE = 10
+MAX_PLAYERS = 10
+MAX_AGE = 50
 CURRENT_YEAR = date.today().year
 BIRTH_YEAR_RANGE = {num for num in range(CURRENT_YEAR - MAX_AGE, CURRENT_YEAR + 1)}
-
-## ======================
-## UTILITY
-## ======================
-
-
-def get_valid_response(valid_choices: set, prompt: str, case=str.lower) -> str:
-    while True:
-        response = case(input(prompt).strip())
-        if response not in valid_choices:
-            print("Invalid Input.")
-        else:
-            return response
-
-
-def get_unique_alpha_response(invalid_choices: set, prompt: str, case=str.lower) -> str:
-    unique_error_msg = "Already Taken."
-    alpha_error_msg = "Must be alphabetical only. No numbers or special chars."
-    while True:
-        response = case(input(prompt).strip())
-        if not response.isalpha():
-            print(alpha_error_msg)
-        elif response in invalid_choices:
-            print(unique_error_msg)
-        else:
-            return response
-
-
-def construct_prompt_ending(keys: list[str]) -> str:
-    keys_with_brackets = [
-        f"[{i[0].upper()}]{i[1:]}" if len(i) > 1 else f"[{i.upper()}]" for i in keys
-    ]
-    main_text = ", ".join(keys_with_brackets[:-1])
-    if len(keys_with_brackets) == 2:
-        main_text = main_text + " or"
-    elif len(keys_with_brackets) > 2:
-        main_text = main_text + ", or"
-    prompt_end = f"{main_text} {keys_with_brackets[-1]}?: "
-    return prompt_end
-
-
-def construct_prompt_and_keys(selection: int | dict) -> tuple[str, set[str]]:
-    if isinstance(selection, int):
-        valid_input_list = [str(i) for i in range(1, selection + 1)]
-        prompt_end = construct_prompt_ending(valid_input_list)
-        valid_keys = set(valid_input_list)
-        return prompt_end, valid_keys
-    else:
-        valid_input_list = [v for v in selection.values()]
-        prompt_end = construct_prompt_ending(valid_input_list)
-        valid_keys = set(i[0].lower() for i in valid_input_list)
-        return prompt_end, valid_keys
+VALID_MONTHS = {num for num in range(1, 12 + 1)}
 
 
 ## ======================
-## GAME SETUP
+## PLAYER SETUP
 ## ======================
 
-
-def play_new_game_choice() -> bool:
-    prompt_start = "\nNew game?"
-    prompt_end, valid_keys = construct_prompt_and_keys(NEW_GAME_CHOICES)
-
-    response = get_valid_response(valid_keys, f"{prompt_start} {prompt_end}")
-
-    return response == YES
+def get_player_name(existing_players: set) -> str:
+    prompt = "What is the new Player's name?"
+    name = get_unique_alpha_response(existing_players, prompt, str.title)
+    return name
 
 
-def get_players() -> int:
-    prompt_start = f"\nHow many players are playing against me?"
-    prompt_end, valid_keys = construct_prompt_and_keys(MAX_PLAYERS)
+def get_player_age(player_name: str) -> tuple[int, int]:
+    """Obtain the age of the player (years and months).
 
-    response = int(get_valid_response(valid_keys, f"{prompt_start} {prompt_end}"))
-    return response
+    Args:
+        player_name: name of player who's age is being obtained.
 
+    Returns:
+        A tuple with birth year and month information, formatted (YYYY, MM).
+    """
+    valid_year_keys = BIRTH_YEAR_RANGE
+    year_prompt = f"What year was {player_name} born? Select a year between {min(BIRTH_YEAR_RANGE)} - {max(BIRTH_YEAR_RANGE)}: "
+    player_year = get_valid_response(valid_year_keys, year_prompt)
 
-def collect_player_names(players: int) -> list[str]:
-    player_sheet = []
-    name_set = set()
-    for p in range(1, players + 1):
-        name = get_unique_alpha_response(
-            name_set, f"\nWhat is Player {p}'s name?: ", str.title
-        )
-        player_sheet.append(name)
-        name_set.add(name)
+    valid_month_keys = VALID_MONTHS
+    month_prompt = f"What month was {player_name} born? Select a month between {min(VALID_MONTHS)} - {max(VALID_MONTHS)} months: "
+    player_month = get_valid_response(valid_month_keys, month_prompt)
 
-    return player_sheet
-
-# def collect_player_dob(player_sheet: list) -> dict[str[str, int]]:
-    
-#     valid_year_keys = BIRTH_YEAR_RANGE
-#     player_dict = {}
-
-#     for player in player_sheet:
-#         player_dict[player] = {}
-#         year_prompt = f"What year was {player} born? Select a number between {BIRTH_YEAR_RANGE[0]} - {BIRTH_YEAR_RANGE[-1]}"
-#         player_dict[player][YEARS] = get_valid_response(valid_year_keys, year_prompt)
+    age = (player_month, player_year)
+    return age
 
 
-
-#     return player_dict
+def add_player(existing_players: set) -> None:
+    player_name = get_player_name(existing_players)
+    age = get_player_age(player_name)
 
 
 ## ======================
@@ -137,17 +74,26 @@ class Player:
 
         self.age = f"{years_old} years, {months_old} month(s)"
         self.name = name
+    
+    def edit_player(self) -> None:
+        pass
+        
+        def edit_player_name(self) -> None:
+            pass
+
+        def edit_player_age(self) -> None:
+            pass
 
 
 class Question:
     def __init__(self, content: dict):
         self.content = content
 
-    def display_question(self) -> None:
-        pass
+    # def display_question(self) -> None:
+    #     pass
 
-    def display_answer(self) -> None:
-        pass
+    # def display_answer(self) -> None:
+    #     pass
 
 
 class Question_Bank:
@@ -162,10 +108,8 @@ class Question_Bank:
 
 
 class Session:
-    def __init__(self, player_dict: dict):
-
-        self.player_list = [Player(player, player_dict[player][YEARS], player_dict[player][MONTHS]) for player in player_dict]
-        self.banks = {player: Question_Bank(player.category) for player in self.player_list}
+    def __init__(self):
+        pass
     
     # def get_categories(self) -> dict[str, str]:
     #     pass
@@ -178,7 +122,6 @@ class Session:
 
 
 def main():
-    print("hello")
     p1 = Player("Blanton", 1996, 8)
     print(p1.name, p1.age)
 
