@@ -1,7 +1,7 @@
 """scavenger hunt game where printed barcodes are linked to questions from a grok API call and are integrated into a CLI game"""
 
 from datetime import date
-from utils import get_unique_alpha_response, get_valid_str_response, get_valid_int_response, display_options_from_dict, get_key_number_choice_from_dict
+from utils import get_unique_alpha_response, get_valid_int_response, get_key_int_choice_from_dict, display_options_from_dict, get_user_choice_from_menu
 
 sample_question_bank = {
     1: {"question": "How many legs does an Octupus have?", "answer": "8", "player": "Stella"},
@@ -11,24 +11,75 @@ sample_question_bank = {
 
 sample_category = "Animals"
 
-MANAGE_PLAYERS = "Manage Players"
-MANAGE_QUESTION_BANKS = "Manage Questions"
-ANSWER_QUESTIONS = "Answer Questions"
-VIEW_SCORES = "View Scores"
-EXIT = "Exit"
-UNANSWERED = "Unanwered"
-CORRECTLY_ANSWERED = "Correctly Answered"
-INCORRECTLY_ANSWERED = "Incorrectly Answered"
+
+## ======================
+## CONFIG
+## ======================
+
+
 YES = "Yes"
 NO = "No"
-Y_N_CHOICES = {1: YES, 2: NO}
-CHOICES = {1: MANAGE_PLAYERS, 2: MANAGE_QUESTION_BANKS, 3: ANSWER_QUESTIONS, 4: VIEW_SCORES, 5: EXIT}
-QUESTION_STATUSES = {1: UNANSWERED, 2: CORRECTLY_ANSWERED, 3: INCORRECTLY_ANSWERED}
 YEARS = "years"
 MONTHS = "months"
 CATEGORY = "category"
-MAX_PLAYERS = 10
-MAX_AGE = 50
+MANAGE_PLAYERS = "Manage Players"
+MANAGE_QUESTIONS = "Manage Questions"
+MANAGE_SCORES = "Manage Scores"
+ANSWER_QUESTIONS = "Answer Questions (Play Game)"
+EXIT = "Exit"
+ADD_PLAYER = "Add Player"
+EDIT_PLAYER = "Edit Player"
+REMOVE_PLAYER = "Remove Player"
+VIEW_PLAYERS = "View Players"
+BACK = "Back"
+ASSIGN_NEW_QUESTIONS_TO_ALL_PLAYERS = "Assign New Questions To All Players"
+ASSIGN_NEW_QUESTIONS_TO_SINGLE_PLAYER = "Assign New Questions To Single Player"
+PRINT_QUESTIONS = "Create Question PDF"
+DISPLAY_QUESTIONS_FOR_ALL_PLAYERS = "Display Questions For All Players"
+DISPLAY_QUESTIONS_FOR_SINGLE_PLAYER = "Display Questions For Single Player"
+EDIT_QUESTION_STATUS = "Edit Question Status"
+VIEW_SCORES = "View Scores"
+DELETE_SCROE_HISTORY = "Delete Score History"
+UNANSWERED = "Unanswered"
+CORRECTLY_ANSWERED = "Correctly Answered"
+INCORRECTLY_ANSWERED = "Incorrectly Answered"
+
+
+CHOICES = {
+    MANAGE_PLAYERS: {
+        1: ADD_PLAYER,
+        2: EDIT_PLAYER,
+        3: REMOVE_PLAYER,
+        4: VIEW_PLAYERS,
+        5: BACK
+    },
+    MANAGE_QUESTIONS: {
+        1: ASSIGN_NEW_QUESTIONS_TO_ALL_PLAYERS,
+        2: ASSIGN_NEW_QUESTIONS_TO_SINGLE_PLAYER,
+        3: PRINT_QUESTIONS,
+        4: DISPLAY_QUESTIONS_FOR_ALL_PLAYERS,
+        5: DISPLAY_QUESTIONS_FOR_SINGLE_PLAYER,
+        6: EDIT_QUESTION_STATUS,
+        7: BACK
+    },
+    MANAGE_SCORES: {
+        1: VIEW_SCORES,
+        2: DELETE_SCROE_HISTORY,
+        3: BACK
+    },
+    ANSWER_QUESTIONS: {
+
+    },
+    EXIT: {
+
+    }
+}
+QUESTION_STATUSES = {1: UNANSWERED, 2: CORRECTLY_ANSWERED, 3: INCORRECTLY_ANSWERED}
+Y_N_CHOICES = {1: YES, 2: NO}
+
+
+MAX_PLAYERS = 100
+MAX_AGE = 100
 CURRENT_YEAR = date.today().year
 BIRTH_YEAR_RANGE = {num for num in range(CURRENT_YEAR - MAX_AGE, CURRENT_YEAR + 1)}
 VALID_MONTHS = {num for num in range(1, 12 + 1)}
@@ -37,6 +88,29 @@ VALID_MONTHS = {num for num in range(1, 12 + 1)}
 ## ======================
 ## GAME CLASSES
 ## ======================
+
+class Question:
+    def __init__(self, content: dict):
+        self.content = content
+        self.status = UNANSWERED
+
+    # def display_question(self) -> None:
+    #     pass
+
+    # def display_answer(self) -> None:
+    #     pass
+
+
+class Question_Bank:
+    def __init__(self, category: str):
+        self.category = category
+
+    # def generate_questions(self, player: Player) -> dict[int[str, str]]:
+    #     pass
+
+    # def generate_pdf():
+    #     pass
+
 
 class Player:
     def __init__(self) -> None:
@@ -67,28 +141,6 @@ class Player:
         self.age = f"{self.years_old} years, {self.months_old} month(s)"
 
 
-class Question:
-    def __init__(self, content: dict):
-        self.content = content
-
-    # def display_question(self) -> None:
-    #     pass
-
-    # def display_answer(self) -> None:
-    #     pass
-
-
-class Question_Bank:
-    def __init__(self, category: str):
-        self.category = category
-
-    # def generate_questions(self, player: Player) -> dict[int[str, str]]:
-    #     pass
-
-    # def generate_pdf():
-    #     pass
-
-
 class Run:
     def __init__(self):
         pass
@@ -101,6 +153,11 @@ class Run:
 
 
 class Session:
+   
+    # ======================
+    # INITIALIZATION
+    # ======================
+
     def __init__(self):
         self.existing_players: set[Player] = set()
 
@@ -111,21 +168,73 @@ class Session:
     #     pass
 
     def greet_user(self) -> None:
-        print("Hello! Welcome to The Inquisitor!. Heres how the game works.....")
+        print("Hello! Welcome to The Inquisitor!. Here's how the game works.....")
 
-    def get_user_choice(self):
-        header = "\nOPTIONS:"
-        display_options_from_dict(header, CHOICES)
+    # ======================
+    # USER CHOICES & MENUS
+    # ======================
+    
+    def get_user_choice_of_single_player(self) -> Player:
+        player_list = sorted(self.existing_players, key= lambda p: p.name)
+        player_dict = {player.name: player for player in player_list}
+        header = "\nPLAYERS:"
+        display_options_from_dict(header, player_dict)
 
-        prompt = "What would you like to do?: "
-        choice = get_key_number_choice_from_dict(prompt, CHOICES)
+        prompt = "Which player would you like to select?: "
+        choice = get_key_int_choice_from_dict(prompt, player_dict)
+        player = player_list[choice - 1]
+
+        return player
+    
+    def route_main_menu_actions(self) -> bool:
+        choice = get_user_choice_from_menu(CHOICES)
+        actions = {
+            1: self.route_player_management_menu_actions,
+            2: "placeholder",
+            3: "placeholder",
+            4: "placeholder",
+            5: self.exit
+        }
+
+        action = actions.get(choice)
         
-        return choice
+        if action == self.exit:
+            return action()
+        
+        running = True
+        while running and action:
+            flag = action()
+            if flag == None:
+                continue
+            else:
+                running = flag
+        return True
+    
+    def route_player_management_menu_actions(self) -> bool:
+        choice = get_user_choice_from_menu(CHOICES[MANAGE_PLAYERS], numbered=True)
+        actions = {
+            1: self.add_player,
+            2: self.edit_player,
+            3: self.remove_player,
+            4: self.view_players,
+            5: self.exit
+        }
 
-    def view_players(self) -> None:
-        player_list = sorted(self.existing_players, key=lambda p: p.name)
-        for index, player in enumerate(player_list):
-            print(f"{index + 1}. Name: {player.name}, Age: {player.age}")
+        action = actions.get(choice)
+        if action:
+            flag = action()
+            if flag == None:
+                return True
+            else:
+                return flag
+        return True
+    
+    def exit(self):
+        return False
+
+    # ======================
+    # PLAYER MANAGEMENT
+    # ======================
 
     def add_player(self) -> None:
         fresh_player = Player()
@@ -133,22 +242,28 @@ class Session:
         fresh_player.edit_player_age()
         self.existing_players.add(fresh_player)
 
-    # def edit_player(self, player: Player) -> None:
-    #     pass
+    def edit_player(self) -> None:
+        player = self.get_user_choice_of_single_player()
+        player.edit_player_name
+        player.edit_player_age
 
-    # def remove_player(self, player: Player) -> None:
-    #     pass
+    def remove_player(self) -> None:
+        player = self.get_user_choice_of_single_player()
+        self.existing_players.discard(player)
+
+    def view_players(self) -> None:
+        player_list = sorted(self.existing_players, key=lambda p: p.name)
+        for index, player in enumerate(player_list):
+            print(f"{index + 1}. Name: {player.name}, Age: {player.age}")
     
 
 
 def main():
     session = Session()
     session.greet_user()
-    session.get_user_choice()
-    session.add_player()
-    session.view_players()
-    session.add_player()
-    session.view_players()
+    running = True
+    while running:
+        running = session.route_main_menu_actions()
 
 
 if __name__ == "__main__":

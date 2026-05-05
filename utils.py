@@ -100,14 +100,27 @@ def construct_prompt_and_keys(selection: int | dict) -> tuple[str, set[str]]:
         return prompt_end, valid_keys
 
 
-def get_key_number_choice_from_dict(prompt: str, target_dict: dict) -> int:
+def get_key_int_choice_from_dict(prompt: str, target_dict: dict) -> int:
     dict_range = {i for i in range(1, len(target_dict) + 1)}
     choice = get_valid_int_response(dict_range, prompt)
 
     return choice
 
 
-def display_options_from_dict(header: str, target_dict: dict[int, str]) -> None:
+def get_user_choice_from_menu(target_dict: dict, numbered: bool=False) -> int:
+    header = "\nOPTIONS:"
+    if numbered:
+        display_options_from_numbered_dict(header, target_dict)
+    else:
+        display_options_from_dict(header, target_dict)
+
+    prompt = "What would you like to do?: "
+    choice = get_key_int_choice_from_dict(prompt, target_dict)
+    
+    return choice
+
+
+def display_options_from_numbered_dict(header: str, target_dict: dict[int, str]) -> None:
     '''
     Display options to user for a dict formatted {Option Number: Option Name}.
 
@@ -118,3 +131,16 @@ def display_options_from_dict(header: str, target_dict: dict[int, str]) -> None:
     print(header)
     for k, v in target_dict.items():
         print(f"    {k}. {v}")
+
+
+def display_options_from_dict(header: str, target_dict: dict) -> None:
+    '''
+    Display options to user for a dict formatted with options stored as keys.
+
+    Args:
+        header: Header to be displayed prior to options list being displayed.
+        target_dict: Dict from which options will be derived.    
+    '''
+    print(header)
+    for index, key in enumerate(target_dict):
+        print(f"    {index + 1}. {key}")
