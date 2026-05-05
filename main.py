@@ -247,8 +247,9 @@ class Session:
 
     def edit_player(self) -> None:
         player = self.get_user_choice_of_single_player()
-        player.edit_player_name
-        player.edit_player_age
+        existing_players = {p.name for p in self.existing_players if p != player}
+        player.edit_player_name(existing_players)
+        player.edit_player_age()
 
     def remove_player(self) -> None:
         player = self.get_user_choice_of_single_player()
