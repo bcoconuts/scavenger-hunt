@@ -197,7 +197,7 @@ class Session:
         }
 
         action = actions.get(choice)
-        
+
         if action == self.exit:
             return action()
         
@@ -217,7 +217,7 @@ class Session:
             2: self.edit_player,
             3: self.remove_player,
             4: self.view_players,
-            5: self.exit
+            5: self.back
         }
 
         action = actions.get(choice)
@@ -229,6 +229,9 @@ class Session:
                 return flag
         return True
     
+    def back(self):
+        return False
+
     def exit(self):
         return False
 
