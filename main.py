@@ -27,27 +27,11 @@ QUESTION_STATUSES = {1: UNANSWERED, 2: CORRECTLY_ANSWERED, 3: INCORRECTLY_ANSWER
 YEARS = "years"
 MONTHS = "months"
 CATEGORY = "category"
-NEW_GAME_CHOICES = {"y": "yes", "n": "no"}
-YES = "y"
-NO = "n"
 MAX_PLAYERS = 10
 MAX_AGE = 50
 CURRENT_YEAR = date.today().year
 BIRTH_YEAR_RANGE = {num for num in range(CURRENT_YEAR - MAX_AGE, CURRENT_YEAR + 1)}
 VALID_MONTHS = {num for num in range(1, 12 + 1)}
-
-
-## ======================
-## PLAYER MANAGEMENT
-## ======================
-
-
-def edit_player_name(self) -> None:
-    pass
-
-
-def edit_player_age(self) -> None:
-    pass
 
 
 ## ======================
@@ -66,7 +50,7 @@ class Player:
         prompt = "What should the player be called?: "
         self.name = get_unique_alpha_response(existing_names, prompt, str.title)
 
-    def edit_player_age(self) -> tuple[int, int]:
+    def edit_player_age(self) -> None:
         valid_year_keys = BIRTH_YEAR_RANGE
         year_prompt = f"What year was {self.name} born? Select a year between {min(BIRTH_YEAR_RANGE)} - {max(BIRTH_YEAR_RANGE)}: "
         new_birth_year = get_valid_int_response(valid_year_keys, year_prompt)
@@ -120,11 +104,11 @@ class Session:
     def __init__(self):
         self.existing_players: set[Player] = set()
 
-    def load_previous_session(self):
-        pass
+    # def load_previous_session(self):
+    #     pass
 
-    def save_session(self):
-        pass
+    # def save_session(self):
+    #     pass
 
     def greet_user(self) -> None:
         print("Hello! Welcome to The Inquisitor!. Heres how the game works.....")
@@ -149,16 +133,18 @@ class Session:
         fresh_player.edit_player_age()
         self.existing_players.add(fresh_player)
 
-    def edit_player(self, player: Player) -> None:
-        pass
+    # def edit_player(self, player: Player) -> None:
+    #     pass
 
-    def remove_player(self, player: Player) -> None:
-        pass
+    # def remove_player(self, player: Player) -> None:
+    #     pass
     
 
 
 def main():
     session = Session()
+    session.greet_user()
+    session.get_user_choice()
     session.add_player()
     session.view_players()
     session.add_player()
