@@ -41,33 +41,6 @@ VALID_MONTHS = {num for num in range(1, 12 + 1)}
 ## PLAYER MANAGEMENT
 ## ======================
 
-def get_player_name(existing_players: set) -> str:
-    prompt = "What is the new Player's name?: "
-    name = get_unique_alpha_response(existing_players, prompt, str.title)
-    return name
-
-
-def get_player_age(player_name: str) -> tuple[int, int]:
-    """Obtain the age of the player (years and months).
-
-    Args:
-        player_name: name of player who's age is being obtained.
-
-    Returns:
-        A tuple with birth year and month information, formatted (YYYY, M/MM)
-        e.g. (1996, 8), or (1996, 11).
-    """
-    valid_year_keys = BIRTH_YEAR_RANGE
-    year_prompt = f"What year was {player_name} born? Select a year between {min(BIRTH_YEAR_RANGE)} - {max(BIRTH_YEAR_RANGE)}: "
-    player_year = get_valid_int_response(valid_year_keys, year_prompt)
-
-    valid_month_keys = VALID_MONTHS
-    month_prompt = f"What month was {player_name} born? Select between {min(VALID_MONTHS)} - {max(VALID_MONTHS)}: "
-    player_month = get_valid_int_response(valid_month_keys, month_prompt)
-
-    age = (player_year, player_month)
-    return age
-
 
 def edit_player_name(self) -> None:
     pass
@@ -82,15 +55,32 @@ def edit_player_age(self) -> None:
 ## ======================
 
 class Player:
-    def __init__(self, name: str, birth_year: int, birth_month: int) -> None:
+    def __init__(self) -> None:
+
+        self.years_old = 0
+        self.months_old = 0
+        self.age = ""
+        self.name = ""
+    
+    def edit_player_name(self, existing_names: set) -> None:
+        prompt = "What should the player be called?: "
+        self.name = get_unique_alpha_response(existing_names, prompt, str.title)
+
+    def edit_player_age(self) -> tuple[int, int]:
+        valid_year_keys = BIRTH_YEAR_RANGE
+        year_prompt = f"What year was {self.name} born? Select a year between {min(BIRTH_YEAR_RANGE)} - {max(BIRTH_YEAR_RANGE)}: "
+        new_birth_year = get_valid_int_response(valid_year_keys, year_prompt)
+
+        valid_month_keys = VALID_MONTHS
+        month_prompt = f"What month was {self.name} born? Select between {min(VALID_MONTHS)} - {max(VALID_MONTHS)}: "
+        new_birth_month = get_valid_int_response(valid_month_keys, month_prompt)
 
         today = date.today()
-        total_months = ((today.year - birth_year) * 12) + (today.month - birth_month)
-        years_old = total_months//12
-        months_old = total_months%12
+        total_months = ((today.year - new_birth_year) * 12) + (today.month - new_birth_month)
 
-        self.age = f"{years_old} years, {months_old} month(s)"
-        self.name = name
+        self.years_old = total_months//12
+        self.months_old = total_months%12
+        self.age = f"{self.years_old} years, {self.months_old} month(s)"
 
 
 class Question:
@@ -154,10 +144,10 @@ class Session:
             print(f"{index + 1}. Name: {player.name}, Age: {player.age}")
 
     def add_player(self) -> None:
-        player_name = get_player_name(self.existing_players)
-        birth_year, birth_month = get_player_age(player_name)
-        new_player = Player(player_name, birth_year, birth_month)
-        self.existing_players.add(new_player)
+        fresh_player = Player()
+        fresh_player.edit_player_name({player.name for player in self.existing_players})
+        fresh_player.edit_player_age()
+        self.existing_players.add(fresh_player)
 
     def edit_player(self, player: Player) -> None:
         pass
