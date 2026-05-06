@@ -120,8 +120,13 @@ class Player:
         self.age = ""
         self.name = ""
     
+    def edit_player_attributes(self, existing_names: set) -> None:
+        self.edit_player_name(existing_names)
+        self.edit_player_age()
+        print(f"Player Information Saved.\n    Name: {self.name}, Age: {self.age}")
+
     def edit_player_name(self, existing_names: set) -> None:
-        prompt = "What should the player be called?: "
+        prompt = "\nWhat should the player be called?: "
         self.name = get_unique_alpha_response(existing_names, prompt, str.title)
 
     def edit_player_age(self) -> None:
@@ -187,7 +192,7 @@ class Session:
         return player
     
     def route_main_menu_actions(self) -> bool:
-        choice = get_user_choice_from_menu(CHOICES)
+        choice = get_user_choice_from_menu(CHOICES, header="\nMAIN MENU")
         actions = {
             1: self.route_player_management_menu_actions,
             2: "placeholder",
@@ -211,7 +216,7 @@ class Session:
         return True
     
     def route_player_management_menu_actions(self) -> bool:
-        choice = get_user_choice_from_menu(CHOICES[MANAGE_PLAYERS], numbered=True)
+        choice = get_user_choice_from_menu(CHOICES[MANAGE_PLAYERS], numbered=True, header="\nMANAGE PLAYERS")
         actions = {
             1: self.add_player,
             2: self.edit_player,
@@ -241,22 +246,29 @@ class Session:
 
     def add_player(self) -> None:
         fresh_player = Player()
-        fresh_player.edit_player_name({player.name for player in self.existing_players})
-        fresh_player.edit_player_age()
+        existing_names = {p.name for p in self.existing_players}
+        fresh_player.edit_player_attributes(existing_names)
         self.existing_players.add(fresh_player)
 
     def edit_player(self) -> None:
+        if not self.existing_players:
+            print("\nNo editable players.")
+            return
         player = self.get_user_choice_of_single_player()
-        existing_players = {p.name for p in self.existing_players if p != player}
-        player.edit_player_name(existing_players)
-        player.edit_player_age()
+        existing_names = {p.name for p in self.existing_players if p != player}
+        player.edit_player_attributes(existing_names)
 
     def remove_player(self) -> None:
+        if not self.existing_players:
+            print("\nNo removable players.")
+            return
         player = self.get_user_choice_of_single_player()
         self.existing_players.discard(player)
+        print(f'\nPlayer "{player.name}" Removed')
 
     def view_players(self) -> None:
         player_list = sorted(self.existing_players, key=lambda p: p.name)
+        print()
         for index, player in enumerate(player_list):
             print(f"{index + 1}. Name: {player.name}, Age: {player.age}")
     

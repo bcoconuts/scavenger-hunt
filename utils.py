@@ -107,8 +107,7 @@ def get_key_int_choice_from_dict(prompt: str, target_dict: dict) -> int:
     return choice
 
 
-def get_user_choice_from_menu(target_dict: dict, numbered: bool=False) -> int:
-    header = "\nOPTIONS:"
+def get_user_choice_from_menu(target_dict: dict, numbered: bool=False, header="\nOPTIONS") -> int:
     if numbered:
         display_options_from_numbered_dict(header, target_dict)
     else:
