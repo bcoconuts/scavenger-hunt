@@ -1,7 +1,18 @@
 """scavenger hunt game where printed barcodes are linked to questions from a grok API call and are integrated into a CLI game"""
 
+import os
+from dotenv import load_dotenv
 from datetime import date
-from utils import get_unique_alpha_response, get_valid_int_response, get_key_int_choice_from_dict, display_options_from_dict, get_user_choice_from_menu
+from pydantic import BaseModel, Field
+from utils import (
+    get_unique_alpha_response,
+    get_valid_int_response,
+    get_key_int_choice_from_dict,
+    display_options_from_dict,
+    get_user_choice_from_menu
+)
+from xai_sdk import Client
+from xai_sdk.chat import user, system
 
 sample_question_bank = {
     1: {"question": "How many legs does an Octupus have?", "answer": "8", "player": "Stella"},
@@ -54,11 +65,11 @@ CHOICES = {
         5: BACK
     },
     MANAGE_QUESTIONS: {
-        1: ASSIGN_NEW_QUESTIONS_TO_ALL_PLAYERS,
-        2: ASSIGN_NEW_QUESTIONS_TO_SINGLE_PLAYER,
+        1: ASSIGN_NEW_QUESTIONS_TO_SINGLE_PLAYER,
+        2: ASSIGN_NEW_QUESTIONS_TO_ALL_PLAYERS,
         3: PRINT_QUESTIONS,
-        4: DISPLAY_QUESTIONS_FOR_ALL_PLAYERS,
-        5: DISPLAY_QUESTIONS_FOR_SINGLE_PLAYER,
+        4: DISPLAY_QUESTIONS_FOR_SINGLE_PLAYER,
+        5: DISPLAY_QUESTIONS_FOR_ALL_PLAYERS,
         6: EDIT_QUESTION_STATUS,
         7: BACK
     },
@@ -89,36 +100,14 @@ VALID_MONTHS = {num for num in range(1, 12 + 1)}
 ## GAME CLASSES
 ## ======================
 
-class Question:
-    def __init__(self, content: dict):
-        self.content = content
-        self.status = UNANSWERED
-
-    # def display_question(self) -> None:
-    #     pass
-
-    # def display_answer(self) -> None:
-    #     pass
-
-
-class Question_Bank:
-    def __init__(self, category: str):
-        self.category = category
-
-    # def generate_questions(self, player: Player) -> dict[int[str, str]]:
-    #     pass
-
-    # def generate_pdf():
-    #     pass
-
-
 class Player:
     def __init__(self) -> None:
 
         self.years_old = 0
         self.months_old = 0
-        self.age = ""
-        self.name = ""
+        self.age = f"{self.years_old} years, {self.months_old} month(s)"
+        self.name = "New"
+        self.qbank_assigned = NO
     
     def edit_player_attributes(self, existing_names: set) -> None:
         self.edit_player_name(existing_names)
@@ -146,12 +135,70 @@ class Player:
         self.age = f"{self.years_old} years, {self.months_old} month(s)"
 
 
-class Run:
-    def __init__(self):
-        pass
-    
-    # def get_categories(self) -> dict[str, str]:
+class Question(BaseModel):
+    question_number: int = Field(description="Number of question generated")
+    question: str = Field(description="Question")
+    answer: str = Field(description="Answer")
+    fake_answers: list[str] = Field(
+        description="""List of incorrect answers used for 
+        the other options in a multiple choice question"""
+    )
+    status: str = UNANSWERED
+
+    # def display_question(self) -> None:
     #     pass
+
+    # def display_answer(self) -> None:
+    #     pass
+
+
+class Question_Bank(BaseModel):
+    question_list: list[Question] = Field(description="List of the questions generated")
+    qty: int = Field(description="Quantity of questions generated")
+    category: str = Field(description="Category of the questions generated")
+    date_generated: date = date.today
+    associated_player: Player
+
+    # def generate_pdf():
+    #     pass
+
+
+class Run:
+    client = Client(api_key=os.getenv("XAI_API_KEY"))
+
+    def __init__(self, player: Player):
+        self.player = player
+        self.category = self.get_category()
+        self.runlength = self.get_run_length()
+        self.question_bank = self.generate_questions()
+
+    def generate_questions(self) -> dict:
+        chat = self.client.chat.create(model="grok-latest")
+
+        chat.append(system("""
+            You are a children's teacher that is a trivia expert. 
+            You deign trivia questions to be challenging, but age-appropriate.
+        """)
+        )
+        chat.append(user(f"""
+            Generate 10 trivia questions for a
+            {self.player.age} old. Category: {self.category}. Questions should make them
+            think, not just recall obvious facts.
+        """)
+        )
+
+        # The parse method returns a tuple of the full response object as well as the parsed pydantic object.
+
+        response, question_bank = chat.parse(Question_Bank(associated_player=self.player))
+        assert isinstance(question_bank, Question_Bank)
+
+        return question_bank
+
+    def get_category(self) -> str:
+        return sample_category
+    
+    def get_run_length(self) -> int:
+        return 10
     
     # def generate_all_question_banks(self) -> dict[str, Question_Bank]:
     #     pass
@@ -164,6 +211,7 @@ class Session:
     # ======================
 
     def __init__(self):
+        load_dotenv()
         self.existing_players: set[Player] = set()
 
     # def load_previous_session(self):
@@ -195,7 +243,7 @@ class Session:
         choice = get_user_choice_from_menu(CHOICES, header="\nMAIN MENU")
         actions = {
             1: self.route_player_management_menu_actions,
-            2: "placeholder",
+            2: self.route_run_management_menu_actions,
             3: "placeholder",
             4: "placeholder",
             5: self.exit
@@ -222,6 +270,25 @@ class Session:
             2: self.edit_player,
             3: self.remove_player,
             4: self.view_players,
+            5: self.back
+        }
+
+        action = actions.get(choice)
+        if action:
+            flag = action()
+            if flag == None:
+                return True
+            else:
+                return flag
+        return True
+
+    def route_run_management_menu_actions(self) -> bool:
+        choice = get_user_choice_from_menu(CHOICES[MANAGE_PLAYERS], numbered=True, header="\nMANAGE PLAYERS")
+        actions = {
+            1: self.start_new_run_for_single_player,
+            2: "placeholder",
+            3: "placeholder",
+            4: "placeholder",
             5: self.back
         }
 
@@ -271,6 +338,18 @@ class Session:
         print()
         for index, player in enumerate(player_list):
             print(f"{index + 1}. Name: {player.name}, Age: {player.age}")
+
+    # ======================
+    # RUN MANAGEMENT
+    # ======================
+
+    def start_new_run_for_single_player(self) -> None:
+        if not self.existing_players:
+            print("\nNo players to assign questions to.")
+            return
+        player = self.get_user_choice_of_single_player()
+        run = Run(player)
+        print(run.question_bank)
     
 
 
