@@ -27,7 +27,7 @@ sample_category = "Animals"
 ## CONFIG
 ## ======================
 
-
+DEBUG = True
 YES = "Yes"
 NO = "No"
 YEARS = "years"
@@ -50,7 +50,7 @@ DISPLAY_QUESTIONS_FOR_ALL_PLAYERS = "Display Questions For All Players"
 DISPLAY_QUESTIONS_FOR_SINGLE_PLAYER = "Display Questions For Single Player"
 EDIT_QUESTION_STATUS = "Edit Question Status"
 VIEW_SCORES = "View Scores"
-DELETE_SCROE_HISTORY = "Delete Score History"
+DELETE_SCORE_HISTORY = "Delete Score History"
 UNANSWERED = "Unanswered"
 CORRECTLY_ANSWERED = "Correctly Answered"
 INCORRECTLY_ANSWERED = "Incorrectly Answered"
@@ -75,7 +75,7 @@ CHOICES = {
     },
     MANAGE_SCORES: {
         1: VIEW_SCORES,
-        2: DELETE_SCROE_HISTORY,
+        2: DELETE_SCORE_HISTORY,
         3: BACK
     },
     ANSWER_QUESTIONS: {
@@ -156,7 +156,7 @@ class Question_Bank(BaseModel):
     question_list: list[Question] = Field(description="List of the questions generated")
     qty: int = Field(description="Quantity of questions generated")
     category: str = Field(description="Category of the questions generated")
-    date_generated: date = date.today()
+    date_generated: date = Field(default_factory=date.today())
 
     # def generate_pdf():
     #     pass
@@ -171,25 +171,26 @@ class Run:
         self.runlength = self.get_run_length()
         self.question_bank = self.generate_questions()
 
-    def generate_questions(self) -> dict:
+    def generate_questions(self) -> Question_Bank:
         chat = self.client.chat.create(model="grok-latest")
 
-        chat.append(system("""
-            You are a children's teacher that is a trivia expert. 
-            You deign trivia questions to be challenging, but age-appropriate.
-        """)
-        )
         chat.append(user(f"""
             Generate 10 trivia questions for a
-            {self.player.age} old. Category: {self.category}. Questions should make them
-            think, not just recall obvious facts.
+            {self.player.age} old. Category: {self.category}. 
+            Questions should be simple but challenging, 
+            only something the top 25% of 
+            {self.player.years_old} year olds would know.
         """)
         )
 
         # The parse method returns a tuple of the full response object as well as the parsed pydantic object.
 
-        response, question_bank = chat.parse(Question_Bank)
-        assert isinstance(question_bank, Question_Bank)
+        try:
+            response, question_bank = chat.parse(Question_Bank)
+        except Exception as e:
+            print("Something went wrong with question generation. Please try again")
+            if DEBUG: print(e)
+            return None
 
         return question_bank
 
