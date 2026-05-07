@@ -156,18 +156,17 @@ class Question_Bank(BaseModel):
     question_list: list[Question] = Field(description="List of the questions generated")
     qty: int = Field(description="Quantity of questions generated")
     category: str = Field(description="Category of the questions generated")
-    date_generated: date = date.today
-    associated_player: Player
+    date_generated: date = date.today()
 
     # def generate_pdf():
     #     pass
 
 
 class Run:
-    client = Client(api_key=os.getenv("XAI_API_KEY"))
 
-    def __init__(self, player: Player):
+    def __init__(self, player: Player, client: Client):
         self.player = player
+        self.client = client
         self.category = self.get_category()
         self.runlength = self.get_run_length()
         self.question_bank = self.generate_questions()
@@ -189,7 +188,7 @@ class Run:
 
         # The parse method returns a tuple of the full response object as well as the parsed pydantic object.
 
-        response, question_bank = chat.parse(Question_Bank(associated_player=self.player))
+        response, question_bank = chat.parse(Question_Bank)
         assert isinstance(question_bank, Question_Bank)
 
         return question_bank
@@ -212,6 +211,7 @@ class Session:
 
     def __init__(self):
         load_dotenv()
+        self.client = Client(api_key=os.getenv("XAI_API_KEY"))
         self.existing_players: set[Player] = set()
 
     # def load_previous_session(self):
@@ -283,13 +283,15 @@ class Session:
         return True
 
     def route_run_management_menu_actions(self) -> bool:
-        choice = get_user_choice_from_menu(CHOICES[MANAGE_PLAYERS], numbered=True, header="\nMANAGE PLAYERS")
+        choice = get_user_choice_from_menu(CHOICES[MANAGE_QUESTIONS], numbered=True, header="\nMANAGE QUESTIONS")
         actions = {
             1: self.start_new_run_for_single_player,
             2: "placeholder",
             3: "placeholder",
             4: "placeholder",
-            5: self.back
+            5: "placeholder",
+            6: "placeholder",
+            7: self.back
         }
 
         action = actions.get(choice)
@@ -348,7 +350,7 @@ class Session:
             print("\nNo players to assign questions to.")
             return
         player = self.get_user_choice_of_single_player()
-        run = Run(player)
+        run = Run(player, self.client)
         print(run.question_bank)
     
 
