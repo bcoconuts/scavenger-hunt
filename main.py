@@ -48,6 +48,8 @@ ASSIGN_NEW_QUESTIONS_TO_SINGLE_PLAYER = "Assign New Questions To Single Player"
 PRINT_QUESTIONS = "Create Question PDF"
 DISPLAY_QUESTIONS_FOR_ALL_PLAYERS = "Display Questions For All Players"
 DISPLAY_QUESTIONS_FOR_SINGLE_PLAYER = "Display Questions For Single Player"
+DELETE_QUESTIONS_FOR_ALL_PLAYERS = "Delete Questions For All Players"
+DELETE_QUESTIONS_FOR_SINGLE_PLAYER = "Delete Questions For Single Player"
 EDIT_QUESTION_STATUS = "Edit Question Status"
 VIEW_SCORES = "View Scores"
 DELETE_SCORE_HISTORY = "Delete Score History"
@@ -66,12 +68,11 @@ CHOICES = {
     },
     MANAGE_QUESTIONS: {
         1: ASSIGN_NEW_QUESTIONS_TO_SINGLE_PLAYER,
-        2: ASSIGN_NEW_QUESTIONS_TO_ALL_PLAYERS,
-        3: PRINT_QUESTIONS,
-        4: DISPLAY_QUESTIONS_FOR_SINGLE_PLAYER,
-        5: DISPLAY_QUESTIONS_FOR_ALL_PLAYERS,
-        6: EDIT_QUESTION_STATUS,
-        7: BACK
+        2: PRINT_QUESTIONS,
+        3: DISPLAY_QUESTIONS_FOR_SINGLE_PLAYER,
+        4: DELETE_QUESTIONS_FOR_SINGLE_PLAYER,
+        5: EDIT_QUESTION_STATUS,
+        6: BACK
     },
     MANAGE_SCORES: {
         1: VIEW_SCORES,
@@ -89,6 +90,8 @@ QUESTION_STATUSES = {1: UNANSWERED, 2: CORRECTLY_ANSWERED, 3: INCORRECTLY_ANSWER
 Y_N_CHOICES = {1: YES, 2: NO}
 
 
+MAX_QUESTIONS = 100
+VALID_QUESTION_NUMBERS = {num for num in range(1, MAX_QUESTIONS + 1)}
 MAX_PLAYERS = 100
 MAX_AGE = 100
 CURRENT_YEAR = date.today().year
@@ -107,7 +110,8 @@ class Player:
         self.months_old = 0
         self.age = f"{self.years_old} years, {self.months_old} month(s)"
         self.name = "New"
-        self.qbank_assigned = NO
+        self.qbank_assigned = False
+        self.run: Run = None
     
     def edit_player_attributes(self, existing_names: set) -> None:
         self.edit_player_name(existing_names)
@@ -145,8 +149,8 @@ class Question(BaseModel):
     )
     status: str = UNANSWERED
 
-    # def display_question(self) -> None:
-    #     pass
+    def display_question(self) -> None:
+        print(self.question)
 
     # def display_answer(self) -> None:
     #     pass
@@ -154,9 +158,10 @@ class Question(BaseModel):
 
 class Question_Bank(BaseModel):
     question_list: list[Question] = Field(description="List of the questions generated")
-    qty: int = Field(description="Quantity of questions generated")
-    category: str = Field(description="Category of the questions generated")
-    date_generated: date = Field(default_factory=date.today())
+
+    def display_questions(self) -> None:
+        for q in self.question_list:
+            q.display_question()
 
     # def generate_pdf():
     #     pass
@@ -164,18 +169,19 @@ class Question_Bank(BaseModel):
 
 class Run:
 
-    def __init__(self, player: Player, client: Client):
+    def __init__(self, client: Client, player: Player, category: str, run_length: int):
         self.player = player
         self.client = client
-        self.category = self.get_category()
-        self.runlength = self.get_run_length()
+        self.category = category
+        self.run_length = run_length
         self.question_bank = self.generate_questions()
+        self.date_generated = date.today()
 
-    def generate_questions(self) -> Question_Bank:
+    def generate_questions(self) -> Question_Bank | None:
         chat = self.client.chat.create(model="grok-latest")
 
         chat.append(user(f"""
-            Generate 10 trivia questions for a
+            Generate {self.run_length} trivia questions for a
             {self.player.age} old. Category: {self.category}. 
             Questions should be simple but challenging, 
             only something the top 25% of 
@@ -194,11 +200,6 @@ class Run:
 
         return question_bank
 
-    def get_category(self) -> str:
-        return sample_category
-    
-    def get_run_length(self) -> int:
-        return 10
     
     # def generate_all_question_banks(self) -> dict[str, Question_Bank]:
     #     pass
@@ -228,9 +229,21 @@ class Session:
     # USER CHOICES & MENUS
     # ======================
     
-    def get_user_choice_of_single_player(self) -> Player:
+    def get_user_choice_of_existing_players(self) -> Player:
         player_list = sorted(self.existing_players, key= lambda p: p.name)
         player_dict = {player.name: player for player in player_list}
+        header = "\nPLAYERS:"
+        display_options_from_dict(header, player_dict)
+
+        prompt = "Which player would you like to select?: "
+        choice = get_key_int_choice_from_dict(prompt, player_dict)
+        player = player_list[choice - 1]
+
+        return player
+    
+    def get_user_choice_of_existing_players_with_questions(self) -> Player:
+        player_list = sorted(self.existing_players, key= lambda p: p.name)
+        player_dict = {player.name: player for player in player_list if player.qbank_assigned == True}
         header = "\nPLAYERS:"
         display_options_from_dict(header, player_dict)
 
@@ -288,11 +301,10 @@ class Session:
         actions = {
             1: self.start_new_run_for_single_player,
             2: "placeholder",
-            3: "placeholder",
+            3: self.display_questions_for_single_player,
             4: "placeholder",
             5: "placeholder",
-            6: "placeholder",
-            7: self.back
+            6: self.back
         }
 
         action = actions.get(choice)
@@ -324,7 +336,7 @@ class Session:
         if not self.existing_players:
             print("\nNo editable players.")
             return
-        player = self.get_user_choice_of_single_player()
+        player = self.get_user_choice_of_existing_players()
         existing_names = {p.name for p in self.existing_players if p != player}
         player.edit_player_attributes(existing_names)
 
@@ -332,7 +344,7 @@ class Session:
         if not self.existing_players:
             print("\nNo removable players.")
             return
-        player = self.get_user_choice_of_single_player()
+        player = self.get_user_choice_of_existing_players()
         self.existing_players.discard(player)
         print(f'\nPlayer "{player.name}" Removed')
 
@@ -340,7 +352,10 @@ class Session:
         player_list = sorted(self.existing_players, key=lambda p: p.name)
         print()
         for index, player in enumerate(player_list):
-            print(f"{index + 1}. Name: {player.name}, Age: {player.age}")
+            print(f"""{index + 1}. Name: {player.name}
+    Age: {player.age}
+    Questions Assigned: {player.qbank_assigned}"""
+        )
 
     # ======================
     # RUN MANAGEMENT
@@ -350,9 +365,32 @@ class Session:
         if not self.existing_players:
             print("\nNo players to assign questions to.")
             return
-        player = self.get_user_choice_of_single_player()
-        run = Run(player, self.client)
-        print(run.question_bank)
+        player = self.get_user_choice_of_existing_players()
+        category = self.get_category(player)
+        run_length = self.get_run_length(player)
+        run = Run(self.client, player, category, run_length)
+        player.qbank_assigned = True
+        player.run = run
+    
+    def get_category(self, player: Player) -> str:
+        while True:
+            category = input(f"\nWhat should the category of {player.name}'s questions be?: ").strip()
+            if not category.isspace():
+                return category
+            print("\nInvalid Input. Category must not be left blank.")
+    
+    def get_run_length(self, player: Player) -> int:
+        prompt = f"\nHow many questions would you like to generate for {player.name}? (1 - {MAX_QUESTIONS}): "
+        run_length = get_valid_int_response(VALID_QUESTION_NUMBERS, prompt)
+        return run_length
+    
+    def display_questions_for_single_player(self) -> None:
+        if not any([p.qbank_assigned for p in self.existing_players]):
+            print("\nNo players available to view questions for.")
+            return
+        player = self.get_user_choice_of_existing_players_with_questions()
+        player.run.question_bank.display_questions()
+
     
 
 
