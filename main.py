@@ -106,12 +106,12 @@ VALID_MONTHS = {num for num in range(1, 12 + 1)}
 class Player:
     def __init__(self) -> None:
 
-        self.years_old = 0
-        self.months_old = 0
-        self.age = f"{self.years_old} years, {self.months_old} month(s)"
-        self.name = "New"
-        self.qbank_assigned = False
-        self.run: Run = None
+        self.years_old: int = 0
+        self.months_old: int = 0
+        self.age: str = f"{self.years_old} years, {self.months_old} month(s)"
+        self.name: str = "New"
+        self.qbank_assigned: bool = False
+        self.run: Run | None = None
     
     def edit_player_attributes(self, existing_names: set) -> None:
         self.edit_player_name(existing_names)
@@ -170,12 +170,12 @@ class Question_Bank(BaseModel):
 class Run:
 
     def __init__(self, client: Client, player: Player, category: str, run_length: int):
-        self.player = player
-        self.client = client
-        self.category = category
-        self.run_length = run_length
-        self.question_bank = self.generate_questions()
-        self.date_generated = date.today()
+        self.player: Player = player
+        self.client: Client = client
+        self.category: str = category
+        self.run_length: int = run_length
+        self.question_bank: Question_Bank | None = None
+        self.date_generated: date = date.today()
 
     def generate_questions(self) -> Question_Bank | None:
         chat = self.client.chat.create(model="grok-latest")
@@ -213,7 +213,7 @@ class Session:
 
     def __init__(self):
         load_dotenv()
-        self.client = Client(api_key=os.getenv("XAI_API_KEY"))
+        self.client: Client = Client(api_key=os.getenv("XAI_API_KEY"))
         self.existing_players: set[Player] = set()
 
     # def load_previous_session(self):
@@ -242,8 +242,8 @@ class Session:
         return player
     
     def get_user_choice_of_existing_players_with_questions(self) -> Player:
-        player_list = sorted(self.existing_players, key= lambda p: p.name)
-        player_dict = {player.name: player for player in player_list if player.qbank_assigned == True}
+        player_list = sorted({pl for pl in self.existing_players if pl.qbank_assigned}, key= lambda p: p.name)
+        player_dict = {player.name: player for player in player_list}
         header = "\nPLAYERS:"
         display_options_from_dict(header, player_dict)
 
@@ -369,13 +369,17 @@ class Session:
         category = self.get_category(player)
         run_length = self.get_run_length(player)
         run = Run(self.client, player, category, run_length)
+        run.question_bank = run.generate_questions()
+        if run.question_bank is None:
+            print("\nQuestion generation failed. Player questions not assigned.")
+            return
         player.qbank_assigned = True
         player.run = run
     
     def get_category(self, player: Player) -> str:
         while True:
             category = input(f"\nWhat should the category of {player.name}'s questions be?: ").strip()
-            if not category.isspace():
+            if category:
                 return category
             print("\nInvalid Input. Category must not be left blank.")
     
