@@ -2,7 +2,6 @@
 
 import json
 import os
-from dataclasses import dataclass, asdict
 from dotenv import load_dotenv
 from datetime import date
 from pydantic import BaseModel, Field
@@ -132,12 +131,11 @@ class Question_Bank(BaseModel):
     #     pass
 
 
-@dataclass
-class Run:
+class Run(BaseModel):
     category: str
     run_length: int
     question_bank: Question_Bank | None = None
-    date_generated: date = date.today()
+    date_generated: str = str(date.today())
 
     def generate_questions(self, client: Client, player: "Player") -> Question_Bank | None:
         chat = client.chat.create(model="grok-latest")
@@ -167,8 +165,7 @@ class Run:
     #     pass
 
 
-@dataclass
-class Player:
+class Player(BaseModel):
     years_old: int = 0
     months_old: int = 0
     age: str = f"{years_old} years, {months_old} month(s)"
@@ -220,17 +217,6 @@ class Session:
         load_dotenv()
         self.client: Client = Client(api_key=os.getenv("XAI_API_KEY"))
         self.existing_players: list[Player] = []
-
-    # def load_session(self) -> Session:
-    #     try:
-    #         with open(SESSION_FILE, "r") as f:
-    #             loaded_dict = json.load(f)
-    #         player_dict = {int(k): v for k, v in loaded_dict.items()}
-    #     except FileNotFoundError:
-    #         player_dict = {}
-        
-    #     return player_dict
-
 
     def greet_user(self) -> None:
         print("Hello! Welcome to The Inquisitor!. Here's how the game works.....")
@@ -373,9 +359,9 @@ class Session:
             print("\nNo players to assign questions to.")
             return
         player = self.get_user_choice_of_existing_players()
-        category = self.get_category(player)
-        run_length = self.get_run_length(player)
-        run = Run(category, run_length)
+        cat = self.get_category(player)
+        r_length = self.get_run_length(player)
+        run = Run(category=cat, run_length=r_length)
         run.question_bank = run.generate_questions(self.client, player)
         if run.question_bank is None:
             print("\nQuestion generation failed. Player questions not assigned.")
@@ -401,34 +387,37 @@ class Session:
             return
         player = self.get_user_choice_of_existing_players_with_questions()
         player.run.question_bank.display_questions()
+
+
+## ======================
+## FILE I/O
+## ======================
+
+def save_session(session: Session) -> None:
+    save_dict = {f"Player {(i + 1)}:": p.model_dump() for i, p in enumerate(session.existing_players)}
+    with open(PLAYER_FILE, "w") as f:
+        json.dump(save_dict, f, indent=5)
+
+
+def load_session() -> Session:
+    try:
+        with open(PLAYER_FILE, "r") as f:
+            loaded_dict = json.load(f)
+            session = Session()
+            session.existing_players = [Player.model_validate(p) for p in loaded_dict.values()]
+
+    except FileNotFoundError:
+        session = Session()
     
+    return session
+
 
 ## ======================
 ## MAIN LOOP
 ## ======================
 
-
-def save_session(session: Session) -> None:
-    save_dict: dict = {}
-    for p in session.existing_players:
-        if p.qbank_assigned:
-            q_bank = p.run.question_bank.model_dump()
-            active_run = asdict(p.run)
-            player = asdict(p)
-            print(player)
-            player[run] = active_run
-            player[run][question_bank] = q_bank
-        else:
-            player = asdict(p)
-        save_dict[f"Player {session.existing_players.index(p) + 1}"] = player
-
-
-    with open(PLAYER_FILE, "w") as f:
-        json.dump(save_dict, f, indent=3)
-
-
 def main():
-    session = Session()
+    session = load_session()
     session.greet_user()
     running = True
     while running:
