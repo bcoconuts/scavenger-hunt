@@ -1,6 +1,8 @@
 """scavenger hunt game where printed barcodes are linked to questions from a grok API call and are integrated into a CLI game"""
 
+import json
 import os
+from dataclasses import dataclass, asdict
 from dotenv import load_dotenv
 from datetime import date
 from pydantic import BaseModel, Field
@@ -14,20 +16,13 @@ from utils import (
 from xai_sdk import Client
 from xai_sdk.chat import user, system
 
-sample_question_bank = {
-    1: {"question": "How many legs does an Octupus have?", "answer": "8", "player": "Stella"},
-    2: {"question": "How many legs does an Elephant have?", "answer": "4", "player": "Stella"},
-    3: {"question": "How many legs does a Person have?", "answer": "2", "player": "Charlie"}
-}
-
-sample_category = "Animals"
-
 
 ## ======================
 ## CONFIG
 ## ======================
 
 DEBUG = True
+PLAYER_FILE = "players.json"
 YES = "Yes"
 NO = "No"
 YEARS = "years"
@@ -103,15 +98,83 @@ VALID_MONTHS = {num for num in range(1, 12 + 1)}
 ## GAME CLASSES
 ## ======================
 
-class Player:
-    def __init__(self) -> None:
+class Question(BaseModel):
+    question_number: int = Field(description="Number of question generated")
+    question: str = Field(description="Question")
+    answer: str = Field(description="Answer")
+    fake_answers: list[str] = Field(
+        description="""List of incorrect answers used for 
+        the other options in a multiple choice question"""
+    )
+    status: str = UNANSWERED
 
-        self.years_old: int = 0
-        self.months_old: int = 0
-        self.age: str = f"{self.years_old} years, {self.months_old} month(s)"
-        self.name: str = "New"
-        self.qbank_assigned: bool = False
-        self.run: Run | None = None
+    def display_question(self) -> None:
+        print(f"""
+=== No. {self.question_number} ===
+Question: {self.question}
+  Answer: {self.answer}
+  Status: {self.status}\
+"""
+        )
+
+    # def display_answer(self) -> None:
+    #     pass
+
+
+class Question_Bank(BaseModel):
+    question_list: list[Question] = Field(description="List of the questions generated")
+
+    def display_questions(self) -> None:
+        for q in self.question_list:
+            q.display_question()
+
+    # def generate_pdf():
+    #     pass
+
+
+@dataclass
+class Run:
+    category: str
+    run_length: int
+    question_bank: Question_Bank | None = None
+    date_generated: date = date.today()
+
+    def generate_questions(self, client: Client, player: Player) -> Question_Bank | None:
+        chat = client.chat.create(model="grok-latest")
+
+        chat.append(user(f"""
+            Generate {self.run_length} trivia questions for a
+            {player.age} old. Category: {self.category}. 
+            Questions should be simple but challenging, 
+            only something the top 25% of 
+            {player.years_old} year olds would know.
+        """)
+        )
+
+        # The parse method returns a tuple of the full response object as well as the parsed pydantic object.
+
+        try:
+            response, question_bank = chat.parse(Question_Bank)
+        except Exception as e:
+            print("Something went wrong with question generation. Please try again")
+            if DEBUG: print(e)
+            return None
+
+        return question_bank
+
+    
+    # def generate_all_question_banks(self) -> dict[str, Question_Bank]:
+    #     pass
+
+
+@dataclass
+class Player:
+    years_old: int = 0
+    months_old: int = 0
+    age: str = f"{years_old} years, {months_old} month(s)"
+    name: str = "New"
+    qbank_assigned: bool = False
+    run: Run | None = None
     
     def edit_player_attributes(self, existing_names: set) -> None:
         self.edit_player_name(existing_names)
@@ -138,77 +201,19 @@ class Player:
         self.months_old = total_months%12
         self.age = f"{self.years_old} years, {self.months_old} month(s)"
 
-
-class Question(BaseModel):
-    question_number: int = Field(description="Number of question generated")
-    question: str = Field(description="Question")
-    answer: str = Field(description="Answer")
-    fake_answers: list[str] = Field(
-        description="""List of incorrect answers used for 
-        the other options in a multiple choice question"""
-    )
-    status: str = UNANSWERED
-
-    def display_question(self) -> None:
-        print(self.question)
-
-    # def display_answer(self) -> None:
-    #     pass
-
-
-class Question_Bank(BaseModel):
-    question_list: list[Question] = Field(description="List of the questions generated")
-
-    def display_questions(self) -> None:
-        for q in self.question_list:
-            q.display_question()
-
-    # def generate_pdf():
-    #     pass
-
-
-class Run:
-
-    def __init__(self, client: Client, player: Player, category: str, run_length: int):
-        self.player: Player = player
-        self.client: Client = client
-        self.category: str = category
-        self.run_length: int = run_length
-        self.question_bank: Question_Bank | None = None
-        self.date_generated: date = date.today()
-
-    def generate_questions(self) -> Question_Bank | None:
-        chat = self.client.chat.create(model="grok-latest")
-
-        chat.append(user(f"""
-            Generate {self.run_length} trivia questions for a
-            {self.player.age} old. Category: {self.category}. 
-            Questions should be simple but challenging, 
-            only something the top 25% of 
-            {self.player.years_old} year olds would know.
-        """)
+    def display_player_info(self) -> None:
+        print(f"""\
+              Name: {self.name}
+               Age: {self.age}
+Questions Assigned: {self.qbank_assigned}
+"""
         )
-
-        # The parse method returns a tuple of the full response object as well as the parsed pydantic object.
-
-        try:
-            response, question_bank = chat.parse(Question_Bank)
-        except Exception as e:
-            print("Something went wrong with question generation. Please try again")
-            if DEBUG: print(e)
-            return None
-
-        return question_bank
-
-    
-    # def generate_all_question_banks(self) -> dict[str, Question_Bank]:
-    #     pass
 
 
 class Session:
    
     # ======================
-    # INITIALIZATION
+    # INITIALIZATION & PERSISTENCE
     # ======================
 
     def __init__(self):
@@ -216,11 +221,20 @@ class Session:
         self.client: Client = Client(api_key=os.getenv("XAI_API_KEY"))
         self.existing_players: set[Player] = set()
 
-    # def load_previous_session(self):
-    #     pass
+    # def load_session(self) -> Session:
+    #     try:
+    #         with open(SESSION_FILE, "r") as f:
+    #             loaded_dict = json.load(f)
+    #         player_dict = {int(k): v for k, v in loaded_dict.items()}
+    #     except FileNotFoundError:
+    #         player_dict = {}
+        
+    #     return player_dict
 
-    # def save_session(self):
-    #     pass
+    def save_session(self) -> None:
+        with open(PLAYER_FILE, "w") as f:
+            for p in self.existing_players:
+                json.dump(p, f)
 
     def greet_user(self) -> None:
         print("Hello! Welcome to The Inquisitor!. Here's how the game works.....")
@@ -352,10 +366,8 @@ class Session:
         player_list = sorted(self.existing_players, key=lambda p: p.name)
         print()
         for index, player in enumerate(player_list):
-            print(f"""{index + 1}. Name: {player.name}
-    Age: {player.age}
-    Questions Assigned: {player.qbank_assigned}"""
-        )
+            print(f"""=== No. {index + 1} ===""")
+            player.display_player_info()
 
     # ======================
     # RUN MANAGEMENT
@@ -368,8 +380,8 @@ class Session:
         player = self.get_user_choice_of_existing_players()
         category = self.get_category(player)
         run_length = self.get_run_length(player)
-        run = Run(self.client, player, category, run_length)
-        run.question_bank = run.generate_questions()
+        run = Run(self.client, category, run_length)
+        run.question_bank = run.generate_questions(self.client, player)
         if run.question_bank is None:
             print("\nQuestion generation failed. Player questions not assigned.")
             return
@@ -394,9 +406,11 @@ class Session:
             return
         player = self.get_user_choice_of_existing_players_with_questions()
         player.run.question_bank.display_questions()
-
     
 
+## ======================
+## MAIN LOOP
+## ======================
 
 def main():
     session = Session()
@@ -404,6 +418,7 @@ def main():
     running = True
     while running:
         running = session.route_main_menu_actions()
+        session.save_session()
 
 
 if __name__ == "__main__":
