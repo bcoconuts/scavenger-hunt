@@ -139,7 +139,7 @@ class Run:
     question_bank: Question_Bank | None = None
     date_generated: date = date.today()
 
-    def generate_questions(self, client: Client, player: Player) -> Question_Bank | None:
+    def generate_questions(self, client: Client, player: "Player") -> Question_Bank | None:
         chat = client.chat.create(model="grok-latest")
 
         chat.append(user(f"""
@@ -219,7 +219,7 @@ class Session:
     def __init__(self):
         load_dotenv()
         self.client: Client = Client(api_key=os.getenv("XAI_API_KEY"))
-        self.existing_players: set[Player] = set()
+        self.existing_players: list[Player] = []
 
     # def load_session(self) -> Session:
     #     try:
@@ -231,10 +231,6 @@ class Session:
         
     #     return player_dict
 
-    def save_session(self) -> None:
-        with open(PLAYER_FILE, "w") as f:
-            for p in self.existing_players:
-                json.dump(p, f)
 
     def greet_user(self) -> None:
         print("Hello! Welcome to The Inquisitor!. Here's how the game works.....")
@@ -244,19 +240,18 @@ class Session:
     # ======================
     
     def get_user_choice_of_existing_players(self) -> Player:
-        player_list = sorted(self.existing_players, key= lambda p: p.name)
-        player_dict = {player.name: player for player in player_list}
+        player_dict = {player.name: player for player in self.existing_players}
         header = "\nPLAYERS:"
         display_options_from_dict(header, player_dict)
 
         prompt = "Which player would you like to select?: "
         choice = get_key_int_choice_from_dict(prompt, player_dict)
-        player = player_list[choice - 1]
+        player = self.existing_players[choice - 1]
 
         return player
     
     def get_user_choice_of_existing_players_with_questions(self) -> Player:
-        player_list = sorted({pl for pl in self.existing_players if pl.qbank_assigned}, key= lambda p: p.name)
+        player_list = [p for p in self.existing_players if p.qbank_assigned]
         player_dict = {player.name: player for player in player_list}
         header = "\nPLAYERS:"
         display_options_from_dict(header, player_dict)
@@ -304,6 +299,7 @@ class Session:
         action = actions.get(choice)
         if action:
             flag = action()
+            self.existing_players.sort(key= lambda p: p.name)
             if flag == None:
                 return True
             else:
@@ -344,7 +340,7 @@ class Session:
         fresh_player = Player()
         existing_names = {p.name for p in self.existing_players}
         fresh_player.edit_player_attributes(existing_names)
-        self.existing_players.add(fresh_player)
+        self.existing_players.append(fresh_player)
 
     def edit_player(self) -> None:
         if not self.existing_players:
@@ -359,13 +355,12 @@ class Session:
             print("\nNo removable players.")
             return
         player = self.get_user_choice_of_existing_players()
-        self.existing_players.discard(player)
+        self.existing_players.remove(player)
         print(f'\nPlayer "{player.name}" Removed')
 
     def view_players(self) -> None:
-        player_list = sorted(self.existing_players, key=lambda p: p.name)
         print()
-        for index, player in enumerate(player_list):
+        for index, player in enumerate(self.existing_players):
             print(f"""=== No. {index + 1} ===""")
             player.display_player_info()
 
@@ -380,7 +375,7 @@ class Session:
         player = self.get_user_choice_of_existing_players()
         category = self.get_category(player)
         run_length = self.get_run_length(player)
-        run = Run(self.client, category, run_length)
+        run = Run(category, run_length)
         run.question_bank = run.generate_questions(self.client, player)
         if run.question_bank is None:
             print("\nQuestion generation failed. Player questions not assigned.")
@@ -412,13 +407,33 @@ class Session:
 ## MAIN LOOP
 ## ======================
 
+
+def save_session(session: Session) -> None:
+    save_dict: dict = {}
+    for p in session.existing_players:
+        if p.qbank_assigned:
+            q_bank = p.run.question_bank.model_dump()
+            active_run = asdict(p.run)
+            player = asdict(p)
+            print(player)
+            player[run] = active_run
+            player[run][question_bank] = q_bank
+        else:
+            player = asdict(p)
+        save_dict[f"Player {session.existing_players.index(p) + 1}"] = player
+
+
+    with open(PLAYER_FILE, "w") as f:
+        json.dump(save_dict, f, indent=3)
+
+
 def main():
     session = Session()
     session.greet_user()
     running = True
     while running:
         running = session.route_main_menu_actions()
-        session.save_session()
+        save_session(session)
 
 
 if __name__ == "__main__":
