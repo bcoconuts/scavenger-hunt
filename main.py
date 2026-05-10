@@ -75,7 +75,8 @@ CHOICES = {
     },
     ANSWER_QUESTIONS: {
         1: MULTIPLE_CHOICE,
-        2: ASK_AND_ANSWER
+        2: ASK_AND_ANSWER,
+        3: BACK
     },
     EXIT: {
 
@@ -99,7 +100,7 @@ VALID_MONTHS = {num for num in range(1, 12 + 1)}
 ## ======================
 
 class Question(BaseModel):
-    id: str = str(uuid4())
+    id: str = Field(description="Number for each question")
     question: str = Field(description="Question")
     answer: str = Field(description="Answer")
     fake_answers: list[str] = Field(
@@ -163,6 +164,8 @@ class Run(BaseModel):
 
         try:
             response, question_bank = chat.parse(Question_Bank)
+            for q in question_bank.question_list:
+                q.id = str(uuid4())
         except Exception as e:
             print("Something went wrong with question generation. Please try again")
             if DEBUG: print(e)
@@ -171,12 +174,12 @@ class Run(BaseModel):
         return question_bank
     
     #TODO
-    def generate_pdf():
+    def generate_pdf(self):
         print("This is where a pdf would be generated, If I would have writen the code to do it")
 
 
 class Player(BaseModel):
-    id: str = str(uuid4())
+    id: str = Field(default_factory=lambda: str(uuid4()))
     years_old: int = 0
     months_old: int = 0
     age: str = f"{years_old} years, {months_old} month(s)"
@@ -248,7 +251,7 @@ class Session:
         player_dict = {player.name: player for player in player_list}
         player_prompt = "Which player would you like to select?: "
         choice = get_user_choice_from_menu(player_dict, header="\nPLAYERS:", prompt=player_prompt)
-        player = self.existing_players[choice - 1]
+        player = player_list[choice - 1]
         return player
     
     def route_main_menu_actions(self) -> bool:
@@ -302,8 +305,25 @@ class Session:
             2: self.print_questions,
             3: self.display_questions_for_player,
             4: self.delete_question,
-            5: "placeholder",
+            5: self.edit_question_status,
             6: self.back
+        }
+
+        action = actions.get(choice)
+        if action:
+            flag = action()
+            if flag == None:
+                return True
+            else:
+                return flag
+        return True
+    
+    def route_play_game_menu_actions(self) -> bool:
+        choice = get_user_choice_from_menu(CHOICES[ANSWER_QUESTIONS], numbered=True, header="\nGAME TYPE")
+        actions = {
+            1: self.multiple_choice,
+            2: self.ask_and_answer,
+            3: self.back
         }
 
         action = actions.get(choice)
@@ -357,6 +377,18 @@ class Session:
     # RUN MANAGEMENT
     # ======================
 
+    def get_category(self, player: Player) -> str:
+        while True:
+            category = input(f"\nWhat should the category of {player.name}'s questions be?: ").strip()
+            if category:
+                return category
+            print("\nInvalid Input. Category must not be left blank.")
+    
+    def get_run_length(self, player: Player) -> int:
+        prompt = f"\nHow many questions would you like to generate for {player.name}? (1 - {MAX_QUESTIONS}): "
+        run_length = get_valid_int_response(VALID_QUESTION_NUMBERS, prompt)
+        return run_length
+
     def start_new_run_for_player(self) -> None:
         if not self.existing_players:
             print("\nNo players to assign questions to.")
@@ -372,18 +404,13 @@ class Session:
         player.qbank_assigned = True
         player.run = run
     
-    def get_category(self, player: Player) -> str:
-        while True:
-            category = input(f"\nWhat should the category of {player.name}'s questions be?: ").strip()
-            if category:
-                return category
-            print("\nInvalid Input. Category must not be left blank.")
-    
-    def get_run_length(self, player: Player) -> int:
-        prompt = f"\nHow many questions would you like to generate for {player.name}? (1 - {MAX_QUESTIONS}): "
-        run_length = get_valid_int_response(VALID_QUESTION_NUMBERS, prompt)
-        return run_length
-    
+    def print_questions(self) -> None:
+        if not any([p.qbank_assigned for p in self.existing_players]):
+            print("\nNo players available to print questions for.")
+            return
+        player = self.get_user_choice_of_existing_players_with_questions()
+        player.run.generate_pdf()
+
     def display_questions_for_player(self) -> None:
         if not any([p.qbank_assigned for p in self.existing_players]):
             print("\nNo players available to view questions for.")
@@ -401,13 +428,26 @@ class Session:
         if not player.run.question_bank.question_list:
             player.qbank_assigned = False
         print(f'\nQuestion removed.')
-
-    def print_questions(self) -> None:
+    
+    def edit_question_status(self) -> None:
         if not any([p.qbank_assigned for p in self.existing_players]):
-            print("\nNo players available to print questions for.")
+            print("\nNo players available to remove questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
-        player.run.generate_pdf()
+        question = player.run.question_bank.get_user_choice_of_existing_questions()
+        question.edit_status()
+
+    # ======================
+    # GAME LOOP
+    # ======================
+
+    #TODO
+    def multiple_choice(self) -> None:
+        pass
+
+    #TODO
+    def ask_and_answer(self) -> None:
+        pass
 
 
 ## ======================
