@@ -3,7 +3,7 @@
 import json
 import os
 from dotenv import load_dotenv
-from datetime import date
+from datetime import datetime, date
 from pydantic import BaseModel, Field
 from utils import (
     get_unique_alpha_response,
@@ -13,7 +13,7 @@ from utils import (
     get_user_choice_from_menu
 )
 from xai_sdk import Client
-from xai_sdk.chat import user, system
+from xai_sdk.chat import user
 
 
 ## ======================
@@ -37,13 +37,10 @@ EDIT_PLAYER = "Edit Player"
 REMOVE_PLAYER = "Remove Player"
 VIEW_PLAYERS = "View Players"
 BACK = "Back"
-ASSIGN_NEW_QUESTIONS_TO_ALL_PLAYERS = "Assign New Questions To All Players"
-ASSIGN_NEW_QUESTIONS_TO_SINGLE_PLAYER = "Assign New Questions To Single Player"
+ASSIGN_NEW_QUESTIONS_TO_PLAYER = "Assign New Questions To Player"
 PRINT_QUESTIONS = "Create Question PDF"
-DISPLAY_QUESTIONS_FOR_ALL_PLAYERS = "Display Questions For All Players"
-DISPLAY_QUESTIONS_FOR_SINGLE_PLAYER = "Display Questions For Single Player"
-DELETE_QUESTIONS_FOR_ALL_PLAYERS = "Delete Questions For All Players"
-DELETE_QUESTIONS_FOR_SINGLE_PLAYER = "Delete Questions For Single Player"
+DISPLAY_QUESTIONS_FOR_PLAYER = "Display Questions For Player"
+DELETE_QUESTIONS_FOR_PLAYER = "Delete Questions For Player"
 EDIT_QUESTION_STATUS = "Edit Question Status"
 VIEW_SCORES = "View Scores"
 DELETE_SCORE_HISTORY = "Delete Score History"
@@ -61,10 +58,10 @@ CHOICES = {
         5: BACK
     },
     MANAGE_QUESTIONS: {
-        1: ASSIGN_NEW_QUESTIONS_TO_SINGLE_PLAYER,
+        1: ASSIGN_NEW_QUESTIONS_TO_PLAYER,
         2: PRINT_QUESTIONS,
-        3: DISPLAY_QUESTIONS_FOR_SINGLE_PLAYER,
-        4: DELETE_QUESTIONS_FOR_SINGLE_PLAYER,
+        3: DISPLAY_QUESTIONS_FOR_PLAYER,
+        4: DELETE_QUESTIONS_FOR_PLAYER,
         5: EDIT_QUESTION_STATUS,
         6: BACK
     },
@@ -98,51 +95,60 @@ VALID_MONTHS = {num for num in range(1, 12 + 1)}
 ## ======================
 
 class Question(BaseModel):
-    question_number: int = Field(description="Number of question generated")
     question: str = Field(description="Question")
     answer: str = Field(description="Answer")
     fake_answers: list[str] = Field(
-        description="""List of incorrect answers used for 
+        description="""List of 3 incorrect answers used for 
         the other options in a multiple choice question"""
     )
     status: str = UNANSWERED
 
     def display_question(self) -> None:
-        print(f"""
-=== No. {self.question_number} ===
-Question: {self.question}
-  Answer: {self.answer}
-  Status: {self.status}\
+        fake_as = "\n              ".join(self.fake_answers)
+        print(f"""\
+    Question: {self.question}
+      Answer: {self.answer}
+Fake Answers: {fake_as}
+      Status: {self.status}
 """
         )
-
-    # def display_answer(self) -> None:
-    #     pass
 
 
 class Question_Bank(BaseModel):
     question_list: list[Question] = Field(description="List of the questions generated")
+    category: str = Field(description="Category associated with questions generated")
 
     def display_questions(self) -> None:
+        print()
         for q in self.question_list:
+            print(f"=== No. {self.question_list.index(q) + 1} ===")
             q.display_question()
+    
+    def get_user_choice_of_existing_questions(self) -> Question:
+        question_dict = {q.question: q for q in self.question_list}
+        header = "\nQUESTIONS:"
+        display_options_from_dict(header, question_dict)
+
+        prompt = "Which question would you like to select?: "
+        choice = get_key_int_choice_from_dict(prompt, question_dict)
+        question = self.question_list[choice - 1]
+
+        return question
 
     # def generate_pdf():
     #     pass
 
 
 class Run(BaseModel):
-    category: str
-    run_length: int
     question_bank: Question_Bank | None = None
-    date_generated: str = str(date.today())
+    date_generated: str = Field(default_factory=lambda: str(datetime.now()))
 
-    def generate_questions(self, client: Client, player: "Player") -> Question_Bank | None:
+    def generate_questions(self, client: Client, player: "Player", category: str, run_length: int) -> Question_Bank | None:
         chat = client.chat.create(model="grok-latest")
 
         chat.append(user(f"""
-            Generate {self.run_length} trivia questions for a
-            {player.age} old. Category: {self.category}. 
+            Generate {run_length} trivia questions for a
+            {player.age} old. Category: {category}. 
             Questions should be simple but challenging, 
             only something the top 25% of 
             {player.years_old} year olds would know.
@@ -159,10 +165,6 @@ class Run(BaseModel):
             return None
 
         return question_bank
-
-    
-    # def generate_all_question_banks(self) -> dict[str, Question_Bank]:
-    #     pass
 
 
 class Player(BaseModel):
@@ -210,7 +212,7 @@ Questions Assigned: {self.qbank_assigned}
 class Session:
    
     # ======================
-    # INITIALIZATION & PERSISTENCE
+    # INITIALIZATION
     # ======================
 
     def __init__(self):
@@ -295,10 +297,10 @@ class Session:
     def route_run_management_menu_actions(self) -> bool:
         choice = get_user_choice_from_menu(CHOICES[MANAGE_QUESTIONS], numbered=True, header="\nMANAGE QUESTIONS")
         actions = {
-            1: self.start_new_run_for_single_player,
+            1: self.start_new_run_for_player,
             2: "placeholder",
-            3: self.display_questions_for_single_player,
-            4: "placeholder",
+            3: self.display_questions_for_player,
+            4: self.delete_question,
             5: "placeholder",
             6: self.back
         }
@@ -354,15 +356,15 @@ class Session:
     # RUN MANAGEMENT
     # ======================
 
-    def start_new_run_for_single_player(self) -> None:
+    def start_new_run_for_player(self) -> None:
         if not self.existing_players:
             print("\nNo players to assign questions to.")
             return
         player = self.get_user_choice_of_existing_players()
         cat = self.get_category(player)
         r_length = self.get_run_length(player)
-        run = Run(category=cat, run_length=r_length)
-        run.question_bank = run.generate_questions(self.client, player)
+        run = Run()
+        run.question_bank = run.generate_questions(self.client, player, cat, r_length)
         if run.question_bank is None:
             print("\nQuestion generation failed. Player questions not assigned.")
             return
@@ -381,12 +383,24 @@ class Session:
         run_length = get_valid_int_response(VALID_QUESTION_NUMBERS, prompt)
         return run_length
     
-    def display_questions_for_single_player(self) -> None:
+    def display_questions_for_player(self) -> None:
         if not any([p.qbank_assigned for p in self.existing_players]):
             print("\nNo players available to view questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
         player.run.question_bank.display_questions()
+    
+    def delete_question(self) -> None:
+        if not any([p.qbank_assigned for p in self.existing_players]):
+            print("\nNo players available to remove questions for.")
+            return
+        player = self.get_user_choice_of_existing_players_with_questions()
+        if not player.run.question_bank.question_list:
+            print("\nNo questions available to remove.")
+            return
+        question = player.run.question_bank.get_user_choice_of_existing_questions()
+        player.run.question_bank.question_list.remove(question)
+        print(f'\nQuestion removed.')
 
 
 ## ======================
