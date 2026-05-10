@@ -12,6 +12,7 @@ from utils import (
     display_options_from_dict,
     get_user_choice_from_menu
 )
+from uuid import uuid4
 from xai_sdk import Client
 from xai_sdk.chat import user
 
@@ -44,6 +45,8 @@ DELETE_QUESTIONS_FOR_PLAYER = "Delete Questions For Player"
 EDIT_QUESTION_STATUS = "Edit Question Status"
 VIEW_SCORES = "View Scores"
 DELETE_SCORE_HISTORY = "Delete Score History"
+MULTIPLE_CHOICE = "Multiple Choice"
+ASK_AND_ANSWER = "Ask & Answer"
 UNANSWERED = "Unanswered"
 CORRECTLY_ANSWERED = "Correctly Answered"
 INCORRECTLY_ANSWERED = "Incorrectly Answered"
@@ -71,7 +74,8 @@ CHOICES = {
         3: BACK
     },
     ANSWER_QUESTIONS: {
-
+        1: MULTIPLE_CHOICE,
+        2: ASK_AND_ANSWER
     },
     EXIT: {
 
@@ -95,6 +99,7 @@ VALID_MONTHS = {num for num in range(1, 12 + 1)}
 ## ======================
 
 class Question(BaseModel):
+    id: str = str(uuid4())
     question: str = Field(description="Question")
     answer: str = Field(description="Answer")
     fake_answers: list[str] = Field(
@@ -104,14 +109,19 @@ class Question(BaseModel):
     status: str = UNANSWERED
 
     def display_question(self) -> None:
-        fake_as = "\n              ".join(self.fake_answers)
+        fake_ans = "\n              ".join(self.fake_answers)
         print(f"""\
     Question: {self.question}
       Answer: {self.answer}
-Fake Answers: {fake_as}
+Fake Answers: {fake_ans}
       Status: {self.status}
 """
         )
+    
+    def edit_status(self) -> None:
+        prompt = "Which status would you like to select?: "
+        choice = get_user_choice_from_menu(QUESTION_STATUSES, numbered=True, header="\nSTATUSES:", prompt=prompt)
+        self.status = QUESTION_STATUSES[choice]
 
 
 class Question_Bank(BaseModel):
@@ -120,23 +130,17 @@ class Question_Bank(BaseModel):
 
     def display_questions(self) -> None:
         print()
-        for q in self.question_list:
-            print(f"=== No. {self.question_list.index(q) + 1} ===")
+        for index, q in enumerate(self.question_list):
+            print(f"=== No. {index + 1} ===")
             q.display_question()
     
     def get_user_choice_of_existing_questions(self) -> Question:
         question_dict = {q.question: q for q in self.question_list}
-        header = "\nQUESTIONS:"
-        display_options_from_dict(header, question_dict)
-
         prompt = "Which question would you like to select?: "
-        choice = get_key_int_choice_from_dict(prompt, question_dict)
+        choice = get_user_choice_from_menu(question_dict, header="\nQUESTIONS:", prompt=prompt)
         question = self.question_list[choice - 1]
 
         return question
-
-    # def generate_pdf():
-    #     pass
 
 
 class Run(BaseModel):
@@ -165,9 +169,14 @@ class Run(BaseModel):
             return None
 
         return question_bank
+    
+    #TODO
+    def generate_pdf():
+        print("This is where a pdf would be generated, If I would have writen the code to do it")
 
 
 class Player(BaseModel):
+    id: str = str(uuid4())
     years_old: int = 0
     months_old: int = 0
     age: str = f"{years_old} years, {months_old} month(s)"
@@ -229,25 +238,17 @@ class Session:
     
     def get_user_choice_of_existing_players(self) -> Player:
         player_dict = {player.name: player for player in self.existing_players}
-        header = "\nPLAYERS:"
-        display_options_from_dict(header, player_dict)
-
-        prompt = "Which player would you like to select?: "
-        choice = get_key_int_choice_from_dict(prompt, player_dict)
+        player_prompt = "Which player would you like to select?: "
+        choice = get_user_choice_from_menu(player_dict, header="\nPLAYERS:", prompt=player_prompt)
         player = self.existing_players[choice - 1]
-
         return player
     
     def get_user_choice_of_existing_players_with_questions(self) -> Player:
         player_list = [p for p in self.existing_players if p.qbank_assigned]
         player_dict = {player.name: player for player in player_list}
-        header = "\nPLAYERS:"
-        display_options_from_dict(header, player_dict)
-
-        prompt = "Which player would you like to select?: "
-        choice = get_key_int_choice_from_dict(prompt, player_dict)
-        player = player_list[choice - 1]
-
+        player_prompt = "Which player would you like to select?: "
+        choice = get_user_choice_from_menu(player_dict, header="\nPLAYERS:", prompt=player_prompt)
+        player = self.existing_players[choice - 1]
         return player
     
     def route_main_menu_actions(self) -> bool:
@@ -298,7 +299,7 @@ class Session:
         choice = get_user_choice_from_menu(CHOICES[MANAGE_QUESTIONS], numbered=True, header="\nMANAGE QUESTIONS")
         actions = {
             1: self.start_new_run_for_player,
-            2: "placeholder",
+            2: self.print_questions,
             3: self.display_questions_for_player,
             4: self.delete_question,
             5: "placeholder",
@@ -395,12 +396,18 @@ class Session:
             print("\nNo players available to remove questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
-        if not player.run.question_bank.question_list:
-            print("\nNo questions available to remove.")
-            return
         question = player.run.question_bank.get_user_choice_of_existing_questions()
         player.run.question_bank.question_list.remove(question)
+        if not player.run.question_bank.question_list:
+            player.qbank_assigned = False
         print(f'\nQuestion removed.')
+
+    def print_questions(self) -> None:
+        if not any([p.qbank_assigned for p in self.existing_players]):
+            print("\nNo players available to print questions for.")
+            return
+        player = self.get_user_choice_of_existing_players_with_questions()
+        player.run.generate_pdf()
 
 
 ## ======================

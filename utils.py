@@ -107,13 +107,12 @@ def get_key_int_choice_from_dict(prompt: str, target_dict: dict) -> int:
     return choice
 
 
-def get_user_choice_from_menu(target_dict: dict, numbered: bool=False, header="\nOPTIONS") -> int:
+def get_user_choice_from_menu(target_dict: dict, numbered: bool=False, header="\nOPTIONS", prompt="What would you like to do?: ") -> int:
     if numbered:
         display_options_from_numbered_dict(header, target_dict)
     else:
         display_options_from_dict(header, target_dict)
 
-    prompt = "What would you like to do?: "
     choice = get_key_int_choice_from_dict(prompt, target_dict)
     
     return choice
