@@ -142,3 +142,24 @@ def display_options_from_dict(header: str, target_dict: dict) -> None:
     print(header)
     for index, key in enumerate(target_dict):
         print(f"    {index + 1}. {key}")
+
+
+def warn_player_yes_no(prompt: str) -> bool:
+    '''
+    Present the player with a warning and return their response as a bool
+
+    Args:
+        prompt: The prompt the user is presented with to evoke an input. Given prompt will be modified to end with "[y] or [n]?: "
+
+    Returns:
+        True: if player selects to proceed ("y").
+        False: if player selects to decline to proceed ("n").
+    '''
+    options = {"y", "n"}
+    prompt_end = construct_prompt_ending(options)
+    full_prompt = prompt + prompt_end
+    choice = get_valid_str_response(options, full_prompt)
+    if choice == 'y':
+        return True
+    else:
+        return False
