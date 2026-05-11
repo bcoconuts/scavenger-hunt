@@ -5,11 +5,10 @@ import os
 from dotenv import load_dotenv
 from datetime import datetime, date
 from pydantic import BaseModel, Field
+from random import shuffle
 from utils import (
     get_unique_alpha_response,
     get_valid_int_response,
-    get_key_int_choice_from_dict,
-    display_options_from_dict,
     get_user_choice_from_menu
 )
 from uuid import uuid4
@@ -100,7 +99,6 @@ VALID_MONTHS = {num for num in range(1, 12 + 1)}
 ## ======================
 
 class Question(BaseModel):
-    id: str = Field(description="Number for each question")
     question: str = Field(description="Question")
     answer: str = Field(description="Answer")
     fake_answers: list[str] = Field(
@@ -108,8 +106,9 @@ class Question(BaseModel):
         the other options in a multiple choice question"""
     )
     status: str = UNANSWERED
+    id: str = ""
 
-    def display_question(self) -> None:
+    def display_all_question_content(self) -> None:
         fake_ans = "\n              ".join(self.fake_answers)
         print(f"""\
     Question: {self.question}
@@ -118,6 +117,10 @@ Fake Answers: {fake_ans}
       Status: {self.status}
 """
         )
+    
+    def display_question_in_mul_choice_fmt(self) -> None:
+        all_answers = [(a for a in self.fake_answers), self.answer]
+        shuffle(all_answers)
     
     def edit_status(self) -> None:
         prompt = "Which status would you like to select?: "
@@ -133,7 +136,7 @@ class Question_Bank(BaseModel):
         print()
         for index, q in enumerate(self.question_list):
             print(f"=== No. {index + 1} ===")
-            q.display_question()
+            q.display_all_question_content()
     
     def get_user_choice_of_existing_questions(self) -> Question:
         question_dict = {q.question: q for q in self.question_list}
@@ -260,7 +263,7 @@ class Session:
             1: self.route_player_management_menu_actions,
             2: self.route_run_management_menu_actions,
             3: "placeholder",
-            4: "placeholder",
+            4: self.route_play_game_menu_actions,
             5: self.exit
         }
 
@@ -292,6 +295,7 @@ class Session:
         if action:
             flag = action()
             self.existing_players.sort(key= lambda p: p.name)
+            save_session(self.existing_players)
             if flag == None:
                 return True
             else:
@@ -312,6 +316,7 @@ class Session:
         action = actions.get(choice)
         if action:
             flag = action()
+            save_session(self.existing_players)
             if flag == None:
                 return True
             else:
@@ -329,6 +334,7 @@ class Session:
         action = actions.get(choice)
         if action:
             flag = action()
+            save_session(self.existing_players)
             if flag == None:
                 return True
             else:
@@ -431,7 +437,7 @@ class Session:
     
     def edit_question_status(self) -> None:
         if not any([p.qbank_assigned for p in self.existing_players]):
-            print("\nNo players available to remove questions for.")
+            print("\nNo players available to edit question statuses for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
         question = player.run.question_bank.get_user_choice_of_existing_questions()
@@ -454,8 +460,8 @@ class Session:
 ## FILE I/O
 ## ======================
 
-def save_session(session: Session) -> None:
-    save_dict = {f"Player {(i + 1)}:": p.model_dump() for i, p in enumerate(session.existing_players)}
+def save_session(existing_players: list[Player]) -> None:
+    save_dict = {f"Player {(i + 1)}:": p.model_dump() for i, p in enumerate(existing_players)}
     with open(PLAYER_FILE, "w") as f:
         json.dump(save_dict, f, indent=5)
 
@@ -483,7 +489,7 @@ def main():
     running = True
     while running:
         running = session.route_main_menu_actions()
-        save_session(session)
+        
 
 
 if __name__ == "__main__":
