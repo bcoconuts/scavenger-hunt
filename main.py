@@ -133,7 +133,7 @@ Fake Answers: {fake_ans}
     def get_user_choice_of_ask_answer_question(self) -> bool:
         prompt = "Was the question answered correctly?: "
         choice = get_user_choice_from_menu(YES_NO_DICT, numbered=True, header=f"\n{self.question} [Answer: {self.answer}]", prompt=prompt)
-        if choice == YES:
+        if YES_NO_DICT[choice] == YES:
             return True
         else:
             return False
@@ -386,8 +386,8 @@ class Session:
     def route_play_game_menu_actions(self) -> bool:
         choice = get_user_choice_from_menu(CHOICES[ANSWER_QUESTIONS], numbered=True, header="\nGAME TYPE")
         actions = {
-            1: self.run_game_loop(ask_answer_flag=False),
-            2: self.run_game_loop(ask_answer_flag=True),
+            1: lambda: self.run_game_loop(ask_answer_flag=False),
+            2: lambda: self.run_game_loop(ask_answer_flag=True),
             3: self.back
         }
 
