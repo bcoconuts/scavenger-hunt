@@ -4,12 +4,12 @@ import json
 import os
 from dotenv import load_dotenv
 from datetime import datetime, date
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from utils import (
     get_unique_alpha_response,
     get_valid_int_response,
     get_user_choice_from_menu,
-    warn_player_yes_no
+    get_yes_no_response
 )
 from uuid import uuid4
 from xai_sdk import Client
@@ -45,7 +45,7 @@ EDIT_QUESTION_STATUS = "Edit Question Status"
 VIEW_SCORES = "View Scores"
 DELETE_SCORE_HISTORY = "Delete Score History"
 MULTIPLE_CHOICE = "Multiple Choice"
-ASK_AND_ANSWER = "Ask & Answer"
+ASK_AND_ANSWER = "Ask & Answer (Parents guide game)"
 UNANSWERED = "Unanswered"
 CORRECTLY_ANSWERED = "Correctly Answered"
 INCORRECTLY_ANSWERED = "Incorrectly Answered"
@@ -81,6 +81,7 @@ CHOICES = {
     }
 }
 QUESTION_STATUSES = {1: UNANSWERED, 2: CORRECTLY_ANSWERED, 3: INCORRECTLY_ANSWERED}
+YES_NO_DICT = {1: YES, 2: NO}
 
 MAX_QUESTIONS = 100
 VALID_QUESTION_NUMBERS = {num for num in range(1, MAX_QUESTIONS + 1)}
@@ -128,9 +129,16 @@ Fake Answers: {fake_ans}
         choice = get_user_choice_from_menu(answer_dict, numbered=True, header=f"\n{self.question}", prompt=prompt)
         answer = answer_dict[choice]
         return answer
+    
+    def get_user_choice_of_ask_answer_question(self) -> bool:
+        prompt = "Was the question answered correctly?: "
+        choice = get_user_choice_from_menu(YES_NO_DICT, numbered=True, header=f"\n{self.question} [Answer: {self.answer}]", prompt=prompt)
+        if choice == YES:
+            return True
+        else:
+            return False
 
-
-class Question_Bank(BaseModel):
+class QuestionBank(BaseModel):
     question_list: list[Question] = Field(description="List of the questions generated")
     category: str = Field(description="Category associated with questions generated")
 
@@ -150,25 +158,25 @@ class Question_Bank(BaseModel):
 
 
 class Run(BaseModel):
-    question_bank: Question_Bank | None = None
+    question_bank: QuestionBank | None = None
     date_generated: str = Field(default_factory=lambda: str(datetime.now()))
 
-    def generate_questions(self, client: Client, player: "Player", category: str, run_length: int) -> Question_Bank | None:
+    def generate_questions(self, client: Client, player: "Player", category: str, run_length: int) -> QuestionBank | None:
         chat = client.chat.create(model="grok-latest")
 
-        chat.append(user(f"""
-            Generate {run_length} trivia questions for a
-            {player.age} old. Category: {category}. 
-            Questions should be simple but challenging, 
-            only something the top 25% of 
-            {player.years_old} year olds would know.
-        """)
+        chat.append(user(f"""\
+Generate {run_length} trivia questions.
+
+Questions aimed at {player.age_bucket} 
+
+Category for questions: {category}."""
+            )
         )
 
         # The parse method returns a tuple of the full response object as well as the parsed pydantic object.
 
         try:
-            response, question_bank = chat.parse(Question_Bank)
+            response, question_bank = chat.parse(QuestionBank)
             for q in question_bank.question_list:
                 q.id = str(uuid4())
         except Exception as e:
@@ -187,14 +195,65 @@ class Player(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     years_old: int = 0
     months_old: int = 0
-    age: str = ""
     name: str = ""
     run: Run | None = None
+
+    @computed_field
+    @property
+    def age_bucket(self) -> str:
+        if self.years_old <= 3:
+            return (
+                "a bright toddler aged 2-3. They know basic colors, can count to 10+, "
+                "know common animals and their sounds, and understand simple stories. "
+                "Questions should challenge the top 25 percent of kids this age — not softballs."
+            )
+        elif self.years_old <= 5:
+            return (
+                "a bright, well-educated preschooler aged 4-5. They are beginning to read, "
+                "know numbers past 20, understand basic opposites, seasons, and simple science "
+                "Questions should challenge the top 25 percent of kids this age — not softballs."
+            )
+        elif self.years_old <= 7:
+            return (
+                "a bright, well-educated early elementary child aged 6-7. They can read simple "
+                "books, do basic addition and subtraction, and know geography basics. "
+                "Questions should challenge the top 25 percent of kids this age — not softballs."
+            )
+        elif self.years_old <= 10:
+            return (
+                "a bright, well-educated elementary child aged 8-10. They read fluently, "
+                "understand basic history, multiplication, and science concepts. "
+                "Questions should challenge the top 25 percent of kids this age — not softballs."
+            )
+        elif self.years_old <= 13:
+            return (
+                "a bright, well-educated preteen aged 11-13. They have solid general knowledge "
+                "across history, science, geography and literature. "
+                "Questions should genuinely challenge the top 25 percent of kids this age."
+            )
+        elif self.years_old <= 18:
+            return (
+                "a teenager aged 14-18. They have solid general knowledge "
+                "across history, science, math, geography and literature. "
+                "Questions should genuinely challenge the top 25 percent of kids this age."
+            )
+        elif self.years_old <= 22:
+            return (
+                "a college educated person aged 19-22. They have solid general knowledge "
+                "across history, science, math, geography and literature. "
+                "Questions should genuinely challenge the top 25 percent of people this age."
+            )
+        else:
+            return (
+                "an adult with a college eductaion. They have solid general knowledge "
+                "across history, science, math, geography and literature. "
+                "Questions should genuinely challenge the top 50 percent of college educated adults."
+            )
     
     def edit_player_attributes(self, existing_names: set) -> None:
         self.edit_player_name(existing_names)
         self.edit_player_age()
-        print(f"Player Information Saved.\n    Name: {self.name}, Age: {self.age}")
+        print(f"Player Information Saved.\n    Name: {self.name}, Age: {self.years_old}")
 
     def edit_player_name(self, existing_names: set) -> None:
         prompt = "\nWhat should the player be called?: "
@@ -214,12 +273,11 @@ class Player(BaseModel):
 
         self.years_old = total_months//12
         self.months_old = total_months%12
-        self.age = f"{self.years_old} years, {self.months_old} month(s)"
 
     def display_player_info(self) -> None:
         print(f"""\
               Name: {self.name}
-               Age: {self.age}
+               Age: {self.years_old}
 Questions Assigned: {True if self.run else False}
 """
         )
@@ -235,7 +293,7 @@ class Session:
         load_dotenv()
         self.client: Client = Client(api_key=os.getenv("XAI_API_KEY"))
         self.existing_players: list[Player] = []
-        self.q_p_lookup: dict[str, str] = {}
+        self.q_p_lookup: dict[str, str] = {} # question.id -> player.id
 
     def greet_user(self) -> None:
         print("Hello! Welcome to The Inquisitor!. Here's how the game works.....")
@@ -328,8 +386,8 @@ class Session:
     def route_play_game_menu_actions(self) -> bool:
         choice = get_user_choice_from_menu(CHOICES[ANSWER_QUESTIONS], numbered=True, header="\nGAME TYPE")
         actions = {
-            1: self.multiple_choice,
-            2: self.ask_and_answer,
+            1: self.run_game_loop(ask_answer_flag=False),
+            2: self.run_game_loop(ask_answer_flag=True),
             3: self.back
         }
 
@@ -403,7 +461,7 @@ class Session:
         player = self.get_user_choice_of_existing_players()
         if player.run:
             warning_prompt = "\nWARNING: Assigning new questions will delete any unanswered questions. Would you like to proceed "
-            if not warn_player_yes_no(warning_prompt):
+            if not get_yes_no_response(warning_prompt):
                 print("\nNo questions generated. User manually aborted.")
                 return
         cat = self.get_category(player)
@@ -455,49 +513,55 @@ class Session:
     # GAME LOOP
     # ======================
 
-    def multiple_choice(self) -> None:
-        if not self.q_p_lookup:
-            print("\nNo questions assigned to players.")
-            return
-        all_question_list = [q for ls in [p.run.question_bank.question_list for p in self.existing_players if p.run] for q in ls]
-        eligible_question_ids: dict[str, Question] = {}
-        ineligible_question_ids: dict[str, Question] = {}
-        for q in all_question_list:
-            if q.status == UNANSWERED:
-                eligible_question_ids[q.id] = q
-            else:
-                ineligible_question_ids[q.id] = q
-        if not eligible_question_ids:
-            print("\nNo more avaliable questions")
-            return
-        all_players: dict[str, Player] = {p.id: p for p in self.existing_players if p.run} #TODO: update scoring logic. players accessible through player id and q_p_lookup here.
-        while True:
-            id = input("\nPlease Scan Barcode (Enter 'F' to quit): ").strip()
-            if id.upper() == "F":
-                break
-            elif id in eligible_question_ids:
-                question = eligible_question_ids[id]
-                user_answer = question.get_user_choice_of_mult_choice_question()
-                if question.answer == user_answer:
-                    question.status = CORRECTLY_ANSWERED
-                    print("\nCorrect!")
-                else:
-                    question.status = INCORRECTLY_ANSWERED
-                    print("\nIncorrect...")
-                eligible_question_ids.pop(id)
-                ineligible_question_ids[id] = question
-            elif id in ineligible_question_ids:
-                print("\nQuestion already answered. Please scan a new question.")
-            else:
-                print("\nQuestion not found. Question may be from a previous question set. Please scan a new question.")
-            save_session(self.existing_players)
-            if not eligible_question_ids:
-                print("\nNo more avaliable questions")
-                break
+    def generate_eligible_question_dict(self) -> dict[str, Question]:
+        question_list_list = [p.run.question_bank.question_list for p in self.existing_players if p.run]
+        eligible_question_dict = {q.id: q for ls in question_list_list for q in ls if q.status == UNANSWERED}
+        return eligible_question_dict
+    
+    def generate_eligible_player_dict(self) -> dict[str, Player]:
+        eligible_player_dict = {p.id: p for p in self.existing_players if p.run}
+        return eligible_player_dict
 
-    #TODO
-    def ask_and_answer(self) -> None:
-        pass
+    def _evaluate_answer(self, question: Question, ask_answer_flag: bool) -> None:
+        if ask_answer_flag:
+            user_answer: bool = question.get_user_choice_of_ask_answer_question()
+        else:
+            user_answer: str = question.get_user_choice_of_mult_choice_question()
+        if ask_answer_flag and user_answer:
+            question.status = CORRECTLY_ANSWERED
+            print("\nCongratulations!")
+        elif ask_answer_flag and not user_answer:
+            question.status = INCORRECTLY_ANSWERED
+            print(f"\nBetter luck with the next one!")
+        elif question.answer == user_answer:
+            question.status = CORRECTLY_ANSWERED
+            print("\nCorrect!")
+        else:
+            question.status = INCORRECTLY_ANSWERED
+            print(f"\nIncorrect.\nCorrect answer: {question.answer}")
+
+    def _run_game_logic(self, eligible_question_dict: dict[str, Question], ask_answer_flag: bool) -> bool:
+        scanned_id = input("\nPlease Scan Barcode (Enter 'F' to quit): ").strip()
+        if scanned_id.upper() == "F":
+            return False
+        elif scanned_id in eligible_question_dict:
+            question = eligible_question_dict[scanned_id]
+            self._evaluate_answer(question, ask_answer_flag)
+            eligible_question_dict.pop(scanned_id)
+        else:
+            print("\nQuestion not found. Question may have already been answered or from an older question set. Please scan a new question.")
+        return True
+
+    def run_game_loop(self, ask_answer_flag: bool) -> None:
+        eligible_question_dict = self.generate_eligible_question_dict()
+        eligible_player_dict = self.generate_eligible_player_dict() #TODO: update scoring logic. players accessible through player id and q_p_lookup here.
+        running = True
+        while running:
+            if not eligible_question_dict:
+                print("\nNo avaliable questions")
+                return
+            running = self._run_game_logic(eligible_question_dict, ask_answer_flag)
+            save_session(self.existing_players)
 
 
 ## ======================
@@ -516,7 +580,8 @@ def load_session() -> Session:
             loaded_dict = json.load(f)
             session = Session()
             session.existing_players = [Player.model_validate(p) for p in loaded_dict.values()]
-        session.q_p_lookup = {q.id: p for p, ls in {p.id: p.run.question_bank.question_list for p in session.existing_players if p.run}.items() for q in ls}
+        playerid_player_dict = {p.id: p.run.question_bank.question_list for p in session.existing_players if p.run}
+        session.q_p_lookup = {q.id: playerid for playerid, ls in playerid_player_dict.items() for q in ls}
 
     except FileNotFoundError:
         session = Session()
