@@ -472,26 +472,26 @@ class Session:
             print("\nQuestion generation failed. Player questions not assigned.")
             return
         for q in run.question_bank.question_list:
-            self.q_p_lookup[q.id] = player
+            self.q_p_lookup[q.id] = player.id
         player.run = run
     
     def print_questions(self) -> None:
         if not any([p.run for p in self.existing_players]):
-            print("\nNo players available to print questions for.")
+            print("\nNo players avaliable to print questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
         player.run.generate_pdf()
 
     def display_questions_for_player(self) -> None:
         if not any([p.run for p in self.existing_players]):
-            print("\nNo players available to view questions for.")
+            print("\nNo players avaliable to view questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
         player.run.question_bank.display_questions()
     
     def delete_question(self) -> None:
         if not any([p.run for p in self.existing_players]):
-            print("\nNo players available to remove questions for.")
+            print("\nNo players avaliable to remove questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
         question = player.run.question_bank.get_user_choice_of_existing_questions()
@@ -503,7 +503,7 @@ class Session:
     
     def edit_question_status(self) -> None:
         if not any([p.run for p in self.existing_players]):
-            print("\nNo players available to edit question statuses for.")
+            print("\nNo players avaliable to edit question statuses for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
         question = player.run.question_bank.get_user_choice_of_existing_questions()
