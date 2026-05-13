@@ -87,19 +87,6 @@ def construct_prompt_ending(keys: list[str]) -> str:
     return prompt_end
 
 
-def construct_prompt_and_keys(selection: int | dict) -> tuple[str, set[str]]:
-    if isinstance(selection, int):
-        valid_input_list = [str(i) for i in range(1, selection + 1)]
-        prompt_end = construct_prompt_ending(valid_input_list)
-        valid_keys = set(valid_input_list)
-        return prompt_end, valid_keys
-    else:
-        valid_input_list = [v for v in selection.values()]
-        prompt_end = construct_prompt_ending(valid_input_list)
-        valid_keys = set(i[0].lower() for i in valid_input_list)
-        return prompt_end, valid_keys
-
-
 def get_key_int_choice_from_dict(prompt: str, target_dict: dict) -> int:
     dict_range = {i for i in range(1, len(target_dict) + 1)}
     choice = get_valid_int_response(dict_range, prompt)

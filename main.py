@@ -5,7 +5,6 @@ import os
 from dotenv import load_dotenv
 from datetime import datetime, date
 from pydantic import BaseModel, Field
-from random import choice
 from utils import (
     get_unique_alpha_response,
     get_valid_int_response,
@@ -51,7 +50,6 @@ UNANSWERED = "Unanswered"
 CORRECTLY_ANSWERED = "Correctly Answered"
 INCORRECTLY_ANSWERED = "Incorrectly Answered"
 
-
 CHOICES = {
     MANAGE_PLAYERS: {
         1: ADD_PLAYER,
@@ -83,16 +81,14 @@ CHOICES = {
     }
 }
 QUESTION_STATUSES = {1: UNANSWERED, 2: CORRECTLY_ANSWERED, 3: INCORRECTLY_ANSWERED}
-Y_N_CHOICES = {1: YES, 2: NO}
-
 
 MAX_QUESTIONS = 100
 VALID_QUESTION_NUMBERS = {num for num in range(1, MAX_QUESTIONS + 1)}
 MAX_PLAYERS = 100
 MAX_AGE = 100
 CURRENT_YEAR = date.today().year
-BIRTH_YEAR_RANGE = {num for num in range(CURRENT_YEAR - MAX_AGE, CURRENT_YEAR + 1)}
-VALID_MONTHS = {num for num in range(1, 12 + 1)}
+BIRTH_YEAR_RANGE = set(range(CURRENT_YEAR - MAX_AGE, CURRENT_YEAR + 1))
+VALID_MONTHS = set(range(1, 13))
 
 
 ## ======================
@@ -124,7 +120,7 @@ Fake Answers: {fake_ans}
         choice = get_user_choice_from_menu(QUESTION_STATUSES, numbered=True, header="\nSTATUSES:", prompt=prompt)
         self.status = QUESTION_STATUSES[choice]
 
-    def get_user_choice_of_mult_choice_qestion(self) -> str:
+    def get_user_choice_of_mult_choice_question(self) -> str:
         all_answers = {a for a in self.fake_answers}
         all_answers.add(self.answer)
         answer_dict = {index + 1: a for index, a in enumerate(all_answers)}
@@ -191,9 +187,8 @@ class Player(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     years_old: int = 0
     months_old: int = 0
-    age: str = f"{years_old} years, {months_old} month(s)"
-    name: str = "New"
-    qbank_assigned: bool = False
+    age: str = ""
+    name: str = ""
     run: Run | None = None
     
     def edit_player_attributes(self, existing_names: set) -> None:
@@ -225,7 +220,7 @@ class Player(BaseModel):
         print(f"""\
               Name: {self.name}
                Age: {self.age}
-Questions Assigned: {self.qbank_assigned}
+Questions Assigned: {True if self.run else False}
 """
         )
 
@@ -257,7 +252,7 @@ class Session:
         return player
     
     def get_user_choice_of_existing_players_with_questions(self) -> Player:
-        player_list = [p for p in self.existing_players if p.qbank_assigned]
+        player_list = [p for p in self.existing_players if p.run]
         player_dict = {player.name: player for player in player_list}
         player_prompt = "Which player would you like to select?: "
         choice = get_user_choice_from_menu(player_dict, header="\nPLAYERS:", prompt=player_prompt)
@@ -406,7 +401,7 @@ class Session:
             print("\nNo players to assign questions to.")
             return
         player = self.get_user_choice_of_existing_players()
-        if player.qbank_assigned:
+        if player.run:
             warning_prompt = "\nWARNING: Assigning new questions will delete any unanswered questions. Would you like to proceed "
             if not warn_player_yes_no(warning_prompt):
                 print("\nNo questions generated. User manually aborted.")
@@ -420,25 +415,24 @@ class Session:
             return
         for q in run.question_bank.question_list:
             self.q_p_lookup[q.id] = player
-        player.qbank_assigned = True
         player.run = run
     
     def print_questions(self) -> None:
-        if not any([p.qbank_assigned for p in self.existing_players]):
+        if not any([p.run for p in self.existing_players]):
             print("\nNo players available to print questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
         player.run.generate_pdf()
 
     def display_questions_for_player(self) -> None:
-        if not any([p.qbank_assigned for p in self.existing_players]):
+        if not any([p.run for p in self.existing_players]):
             print("\nNo players available to view questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
         player.run.question_bank.display_questions()
     
     def delete_question(self) -> None:
-        if not any([p.qbank_assigned for p in self.existing_players]):
+        if not any([p.run for p in self.existing_players]):
             print("\nNo players available to remove questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
@@ -446,12 +440,11 @@ class Session:
         player.run.question_bank.question_list.remove(question)
         self.q_p_lookup.pop(question.id)
         if not player.run.question_bank.question_list:
-            player.qbank_assigned = False
             player.run = None
         print(f'\nQuestion removed.')
     
     def edit_question_status(self) -> None:
-        if not any([p.qbank_assigned for p in self.existing_players]):
+        if not any([p.run for p in self.existing_players]):
             print("\nNo players available to edit question statuses for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
@@ -462,12 +455,11 @@ class Session:
     # GAME LOOP
     # ======================
 
-    #TODO
     def multiple_choice(self) -> None:
         if not self.q_p_lookup:
             print("\nNo questions assigned to players.")
             return
-        all_question_list = [q for ls in [p.run.question_bank.question_list for p in self.existing_players if p.qbank_assigned] for q in ls]
+        all_question_list = [q for ls in [p.run.question_bank.question_list for p in self.existing_players if p.run] for q in ls]
         eligible_question_ids: dict[str, Question] = {}
         ineligible_question_ids: dict[str, Question] = {}
         for q in all_question_list:
@@ -475,31 +467,33 @@ class Session:
                 eligible_question_ids[q.id] = q
             else:
                 ineligible_question_ids[q.id] = q
-        all_players: dict[str, Player] = {p.id: p for p in self.existing_players if p.qbank_assigned} #TODO: update scoring logic. players accessible through player id and q_p_lookup here.
+        if not eligible_question_ids:
+            print("\nNo more avaliable questions")
+            return
+        all_players: dict[str, Player] = {p.id: p for p in self.existing_players if p.run} #TODO: update scoring logic. players accessible through player id and q_p_lookup here.
         while True:
             id = input("\nPlease Scan Barcode (Enter 'F' to quit): ").strip()
             if id.upper() == "F":
                 break
             elif id in eligible_question_ids:
                 question = eligible_question_ids[id]
-                user_answer = question.get_user_choice_of_mult_choice_qestion()
-                print(user_answer)
+                user_answer = question.get_user_choice_of_mult_choice_question()
                 if question.answer == user_answer:
                     question.status = CORRECTLY_ANSWERED
+                    print("\nCorrect!")
                 else:
                     question.status = INCORRECTLY_ANSWERED
+                    print("\nIncorrect...")
                 eligible_question_ids.pop(id)
                 ineligible_question_ids[id] = question
-                if not eligible_question_ids:
-                    print("\nNo more avaliable questions")
-                    break
             elif id in ineligible_question_ids:
                 print("\nQuestion already answered. Please scan a new question.")
             else:
                 print("\nQuestion not found. Question may be from a previous question set. Please scan a new question.")
             save_session(self.existing_players)
-
-
+            if not eligible_question_ids:
+                print("\nNo more avaliable questions")
+                break
 
     #TODO
     def ask_and_answer(self) -> None:
@@ -522,7 +516,7 @@ def load_session() -> Session:
             loaded_dict = json.load(f)
             session = Session()
             session.existing_players = [Player.model_validate(p) for p in loaded_dict.values()]
-        session.q_p_lookup = {q.id: p for p, ls in {p.id: p.run.question_bank.question_list for p in session.existing_players if p.qbank_assigned}.items() for q in ls}
+        session.q_p_lookup = {q.id: p for p, ls in {p.id: p.run.question_bank.question_list for p in session.existing_players if p.run}.items() for q in ls}
 
     except FileNotFoundError:
         session = Session()
@@ -540,7 +534,6 @@ def main():
     running = True
     while running:
         running = session.route_main_menu_actions()
-        
 
 
 if __name__ == "__main__":
