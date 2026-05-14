@@ -168,8 +168,10 @@ class Run(BaseModel):
     @computed_field
     @property
     def run_score(self) -> str:
+        if not self.question_bank:
+            return "No Questions Assigned"
         return f"""\
-For currently assigned questions (Category: {self.question_bank.category}):
+For currently assigned question set (Category: {self.question_bank.category}):
    Total Questions Assigned: {len(self.question_bank.question_list)}
         Questions Attempted: {self.questions_attempted}
 Questions Correctly Guessed: {self.questions_answered_correctly}
@@ -609,7 +611,7 @@ class Session:
 
     def run_game_loop(self, ask_answer_flag: bool) -> None:
         eligible_question_dict = self.generate_eligible_question_dict()
-        eligible_player_dict = self.generate_eligible_player_dict() #TODO: update scoring logic. players accessible through player id and q_p_lookup here.
+        eligible_player_dict = self.generate_eligible_player_dict()
         running = True
         while running:
             if not eligible_question_dict:
@@ -652,8 +654,8 @@ class Session:
             if not get_yes_no_response(warning_prompt):
                 print("\nNo score history deleted. User manually aborted.")
                 return
-        player.run.questions_attempted = 0
-        player.run.questions_answered_correctly = 0
+            player.run.questions_attempted = 0
+            player.run.questions_answered_correctly = 0
         player.total_questions_answered = 0
         player.total_questions_correctly_answered = 0
 
