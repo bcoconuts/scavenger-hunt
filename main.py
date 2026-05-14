@@ -43,7 +43,8 @@ DISPLAY_QUESTIONS_FOR_PLAYER = "Display Questions For Player"
 DELETE_QUESTIONS_FOR_PLAYER = "Delete Questions For Player"
 EDIT_QUESTION_STATUS = "Edit Question Status"
 VIEW_SCORES = "View Scores"
-DELETE_SCORE_HISTORY = "Delete Score History"
+DELETE_CURRENT_QUESTIONS_SCORE_HISTORY = "Delete Current Question Set Score History"
+DELETE_ALL_SCORE_HISTORY = "Delete All Score History"
 MULTIPLE_CHOICE = "Multiple Choice"
 ASK_AND_ANSWER = "Ask & Answer (Parents guide game)"
 UNANSWERED = "Unanswered"
@@ -68,8 +69,9 @@ CHOICES = {
     },
     MANAGE_SCORES: {
         1: VIEW_SCORES,
-        2: DELETE_SCORE_HISTORY,
-        3: BACK
+        2: DELETE_CURRENT_QUESTIONS_SCORE_HISTORY,
+        3: DELETE_ALL_SCORE_HISTORY,
+        4: BACK
     },
     ANSWER_QUESTIONS: {
         1: MULTIPLE_CHOICE,
@@ -113,7 +115,7 @@ class Question(BaseModel):
       Answer: {self.answer}
 Fake Answers: {fake_ans}
       Status: {self.status}
-"""
+        """
         )
         
     def edit_status(self) -> None:
@@ -155,11 +157,23 @@ class QuestionBank(BaseModel):
         question = self.question_list[choice - 1]
 
         return question
-
+    
 
 class Run(BaseModel):
     question_bank: QuestionBank | None = None
     date_generated: str = Field(default_factory=lambda: str(datetime.now()))
+    questions_answered_correctly: int = 0
+    questions_attempted: int = 0
+
+    @computed_field
+    @property
+    def run_score(self) -> str:
+        return f"""\
+For currently assigned questions (Category: {self.question_bank.category}):
+   Total Questions Assigned: {len(self.question_bank.question_list)}
+        Questions Attempted: {self.questions_attempted}
+Questions Correctly Guessed: {self.questions_answered_correctly}
+        """
 
     def generate_questions(self, client: Client, player: "Player", category: str, run_length: int) -> QuestionBank | None:
         chat = client.chat.create(model="grok-latest")
@@ -197,6 +211,8 @@ class Player(BaseModel):
     months_old: int = 0
     name: str = ""
     run: Run | None = None
+    total_questions_answered: int = 0
+    total_questions_correctly_answered: int = 0
 
     @computed_field
     @property
@@ -249,6 +265,15 @@ class Player(BaseModel):
                 "across history, science, math, geography and literature. "
                 "Questions should genuinely challenge the top 50 percent of college educated adults."
             )
+        
+    @computed_field
+    @property
+    def all_time_score(self) -> str:
+        return f"""\
+For all questions ever attempted by {self.name}:
+        Questions Attempted: {self.total_questions_answered}
+Questions Correctly Guessed: {self.total_questions_correctly_answered}
+        """
     
     def edit_player_attributes(self, existing_names: set) -> None:
         self.edit_player_name(existing_names)
@@ -322,7 +347,7 @@ class Session:
         actions = {
             1: self.route_player_management_menu_actions,
             2: self.route_run_management_menu_actions,
-            3: "placeholder",
+            3: self.route_score_management_menu_actions,
             4: self.route_play_game_menu_actions,
             5: self.exit
         }
@@ -383,6 +408,25 @@ class Session:
                 return flag
         return True
     
+    def route_score_management_menu_actions(self) -> bool:
+        choice = get_user_choice_from_menu(CHOICES[MANAGE_SCORES], numbered=True, header="\nMANAGE SCORES")
+        actions = {
+            1: self.view_scores,
+            2: self.delete_current_run_score_history,
+            3: self.delete_all_score_history,
+            4: self.back
+        }
+
+        action = actions.get(choice)
+        if action:
+            flag = action()
+            save_session(self.existing_players)
+            if flag == None:
+                return True
+            else:
+                return flag
+        return True
+
     def route_play_game_menu_actions(self) -> bool:
         choice = get_user_choice_from_menu(CHOICES[ANSWER_QUESTIONS], numbered=True, header="\nGAME TYPE")
         actions = {
@@ -429,6 +473,11 @@ class Session:
             print("\nNo removable players.")
             return
         player = self.get_user_choice_of_existing_players()
+        if player.run:
+            warning_prompt = "\nWARNING: Deleting this player will cause all score history to be deleted. Would you like to proceed "
+            if not get_yes_no_response(warning_prompt):
+                print("\nPlayer not deleted. User manually aborted.")
+                return
         self.existing_players.remove(player)
         print(f'\nPlayer "{player.name}" Removed')
 
@@ -477,21 +526,21 @@ class Session:
     
     def print_questions(self) -> None:
         if not any([p.run for p in self.existing_players]):
-            print("\nNo players avaliable to print questions for.")
+            print("\nNo players available to print questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
         player.run.generate_pdf()
 
     def display_questions_for_player(self) -> None:
         if not any([p.run for p in self.existing_players]):
-            print("\nNo players avaliable to view questions for.")
+            print("\nNo players available to view questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
         player.run.question_bank.display_questions()
     
     def delete_question(self) -> None:
         if not any([p.run for p in self.existing_players]):
-            print("\nNo players avaliable to remove questions for.")
+            print("\nNo players available to remove questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
         question = player.run.question_bank.get_user_choice_of_existing_questions()
@@ -503,7 +552,7 @@ class Session:
     
     def edit_question_status(self) -> None:
         if not any([p.run for p in self.existing_players]):
-            print("\nNo players avaliable to edit question statuses for.")
+            print("\nNo players available to edit question statuses for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
         question = player.run.question_bank.get_user_choice_of_existing_questions()
@@ -522,31 +571,37 @@ class Session:
         eligible_player_dict = {p.id: p for p in self.existing_players if p.run}
         return eligible_player_dict
 
-    def _evaluate_answer(self, question: Question, ask_answer_flag: bool) -> None:
+    def _evaluate_answer(self, question: Question, player: Player, ask_answer_flag: bool) -> None:
         if ask_answer_flag:
             user_answer: bool = question.get_user_choice_of_ask_answer_question()
         else:
             user_answer: str = question.get_user_choice_of_mult_choice_question()
         if ask_answer_flag and user_answer:
             question.status = CORRECTLY_ANSWERED
+            self.update_scores(player, correct_flag=True)
             print("\nCongratulations!")
         elif ask_answer_flag and not user_answer:
             question.status = INCORRECTLY_ANSWERED
+            self.update_scores(player, correct_flag=False)
             print(f"\nBetter luck with the next one!")
         elif question.answer == user_answer:
             question.status = CORRECTLY_ANSWERED
+            self.update_scores(player, correct_flag=True)
             print("\nCorrect!")
         else:
             question.status = INCORRECTLY_ANSWERED
+            self.update_scores(player, correct_flag=False)
             print(f"\nIncorrect.\nCorrect answer: {question.answer}")
 
-    def _run_game_logic(self, eligible_question_dict: dict[str, Question], ask_answer_flag: bool) -> bool:
+    def _run_game_logic(self, eligible_question_dict: dict[str, Question], eligible_player_dict: dict[str, Player], ask_answer_flag: bool) -> bool:
         scanned_id = input("\nPlease Scan Barcode (Enter 'F' to quit): ").strip()
         if scanned_id.upper() == "F":
             return False
         elif scanned_id in eligible_question_dict:
             question = eligible_question_dict[scanned_id]
-            self._evaluate_answer(question, ask_answer_flag)
+            player_id = self.q_p_lookup[question.id]
+            player = eligible_player_dict[player_id]
+            self._evaluate_answer(question, player, ask_answer_flag)
             eligible_question_dict.pop(scanned_id)
         else:
             print("\nQuestion not found. Question may have already been answered or from an older question set. Please scan a new question.")
@@ -558,10 +613,49 @@ class Session:
         running = True
         while running:
             if not eligible_question_dict:
-                print("\nNo avaliable questions")
+                print("\nNo available questions")
                 return
-            running = self._run_game_logic(eligible_question_dict, ask_answer_flag)
+            running = self._run_game_logic(eligible_question_dict, eligible_player_dict, ask_answer_flag)
             save_session(self.existing_players)
+
+    # ======================
+    # SCORE MANAGEMENT
+    # ======================
+
+    def update_scores(self, player: Player, correct_flag: bool) -> None:
+        player.total_questions_answered += 1
+        player.run.questions_attempted += 1
+        if correct_flag:
+            player.total_questions_correctly_answered += 1
+            player.run.questions_answered_correctly += 1
+    
+    def view_scores(self) -> None:
+        player = self.get_user_choice_of_existing_players()
+        if player.run:
+            print(f"\n{player.run.run_score}")
+        print(f"\n{player.all_time_score}")
+
+    def delete_current_run_score_history(self) -> None:
+        player = self.get_user_choice_of_existing_players_with_questions()
+        if player.run:
+            warning_prompt = f"\nWARNING: Deleting current question score history will delete score history for all questions with the current {player.run.question_bank.category} category. Would you like to proceed "
+            if not get_yes_no_response(warning_prompt):
+                print("\nNo score history deleted. User manually aborted.")
+                return
+        player.run.questions_attempted = 0
+        player.run.questions_answered_correctly = 0
+
+    def delete_all_score_history(self) -> None:
+        player = self.get_user_choice_of_existing_players()
+        if player.run:
+            warning_prompt = f"\nWARNING: Deleting all score history will delete score history for all questions ever assigned to {player.name} (including current). Would you like to proceed "
+            if not get_yes_no_response(warning_prompt):
+                print("\nNo score history deleted. User manually aborted.")
+                return
+        player.run.questions_attempted = 0
+        player.run.questions_answered_correctly = 0
+        player.total_questions_answered = 0
+        player.total_questions_correctly_answered = 0
 
 
 ## ======================
