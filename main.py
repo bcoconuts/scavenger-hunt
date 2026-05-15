@@ -2,8 +2,12 @@
 
 import json
 import os
+from barcode import Code128
+from barcode.writer import SVGWriter
 from dotenv import load_dotenv
 from datetime import datetime, date
+from fpdf import FPDF
+from io import BytesIO
 from pydantic import BaseModel, Field, computed_field
 from utils import (
     get_unique_alpha_response,
@@ -20,8 +24,10 @@ from xai_sdk.chat import user
 ## CONFIG
 ## ======================
 
+#DEVELOPMENT
 DEBUG = True
-PLAYER_FILE = "players.json"
+
+#STRINGS
 YES = "Yes"
 NO = "No"
 YEARS = "years"
@@ -51,6 +57,7 @@ UNANSWERED = "Unanswered"
 CORRECTLY_ANSWERED = "Correctly Answered"
 INCORRECTLY_ANSWERED = "Incorrectly Answered"
 
+#MENU OPTIONS
 CHOICES = {
     MANAGE_PLAYERS: {
         1: ADD_PLAYER,
@@ -85,6 +92,7 @@ CHOICES = {
 QUESTION_STATUSES = {1: UNANSWERED, 2: CORRECTLY_ANSWERED, 3: INCORRECTLY_ANSWERED}
 YES_NO_DICT = {1: YES, 2: NO}
 
+#NUMBER RANGES
 MAX_QUESTIONS = 100
 VALID_QUESTION_NUMBERS = {num for num in range(1, MAX_QUESTIONS + 1)}
 MAX_PLAYERS = 100
@@ -92,6 +100,20 @@ MAX_AGE = 100
 CURRENT_YEAR = date.today().year
 BIRTH_YEAR_RANGE = set(range(CURRENT_YEAR - MAX_AGE, CURRENT_YEAR + 1))
 VALID_MONTHS = set(range(1, 13))
+
+#PDF GENERATION
+X_BUFFER = 0.125
+Y_BUFFER = 0.25
+BAR_WIDTH = 3.875
+BAR_HEIGTH = 1.5
+COLUMN_SEPARATION = 0.25
+ROW_SEPARATION = 0.125
+NAME_LENGTH = 12
+CAT_LENGTH = 20
+
+# FILES
+PLAYER_FILE_NAME = "players.json"
+PDF_FILE_NAME = f"_questions_{date.today()}.pdf"
 
 
 ## ======================
@@ -161,7 +183,7 @@ class QuestionBank(BaseModel):
 
 class Run(BaseModel):
     question_bank: QuestionBank | None = None
-    date_generated: str = Field(default_factory=lambda: str(datetime.now()))
+    date_generated: str = Field(default_factory=lambda: str(date.today()))
     questions_answered_correctly: int = 0
     questions_attempted: int = 0
 
@@ -202,9 +224,58 @@ Category for questions: {category}."""
 
         return question_bank
     
-    #TODO
-    def generate_pdf(self):
-        print("This is where a pdf would be generated, If I would have writen the code to do it")
+    # ======================
+    # PDF GENERATION
+    # ======================
+
+    def generate_pdf(self, player: 'Player') -> FPDF:
+        pdf = FPDF(unit="in")
+        svg_writer = SVGWriter()
+        text_str = self.generate_text_str(player)
+        x = X_BUFFER
+        y = Y_BUFFER
+        w = BAR_WIDTH
+        h = BAR_HEIGTH
+        page_flag = True
+        column1_flag = True
+
+        for index, question in enumerate(self.question_bank.question_list):
+            q = question.id
+            if page_flag:
+                pdf.add_page()
+                y = Y_BUFFER
+            if column1_flag:
+                x = X_BUFFER
+            elif not column1_flag:
+                x = X_BUFFER + BAR_WIDTH + COLUMN_SEPARATION
+            svg_img_bytes = BytesIO()
+            Code128(q, svg_writer).write(svg_img_bytes, options={'text_distance': 3.0, 'font_size': 8}, text=text_str)
+            pdf.image(svg_img_bytes, x=x, y=y, w=w, h=h)
+            y_bump_flag, page_flag = self.set_heigth_and_page(index + 1)
+            column1_flag = not column1_flag
+            if y_bump_flag:
+                y += BAR_HEIGTH + ROW_SEPARATION
+        
+        return pdf
+
+    def set_heigth_and_page(self, sequence_number: int) -> tuple[bool, bool]:
+        new_page_flag = False
+        y_bump_flag = False
+        if sequence_number % 14 == 0:
+            return (not y_bump_flag, not new_page_flag) 
+        if sequence_number % 2 == 0:
+            return(not y_bump_flag, new_page_flag)
+        return (y_bump_flag, new_page_flag)
+    
+    def generate_text_str(self, player: 'Player') -> str:
+        name = player.name 
+        name_str = name if len(name) < NAME_LENGTH else f"{name[:NAME_LENGTH + 1]}..."
+        category = player.run.question_bank.category
+        cat_str = category if len(category) < CAT_LENGTH else f"{category[:CAT_LENGTH + 1]}..."
+        current_date_str = str(date.today())
+        str_list = [name_str, cat_str, current_date_str]
+        text_str = " - ".join(str_list)
+        return text_str
 
 
 class Player(BaseModel):
@@ -393,7 +464,7 @@ class Session:
         choice = get_user_choice_from_menu(CHOICES[MANAGE_QUESTIONS], numbered=True, header="\nMANAGE QUESTIONS")
         actions = {
             1: self.start_new_run_for_player,
-            2: self.print_questions,
+            2: self.generate_question_pdf,
             3: self.display_questions_for_player,
             4: self.delete_question,
             5: self.edit_question_status,
@@ -526,12 +597,14 @@ class Session:
             self.q_p_lookup[q.id] = player.id
         player.run = run
     
-    def print_questions(self) -> None:
+    def generate_question_pdf(self) -> None:
         if not any([p.run for p in self.existing_players]):
             print("\nNo players available to print questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
-        player.run.generate_pdf()
+        pdf = player.run.generate_pdf(player)
+        pdf.output(f"{player.name}" + PDF_FILE_NAME)
+
 
     def display_questions_for_player(self) -> None:
         if not any([p.run for p in self.existing_players]):
@@ -666,13 +739,13 @@ class Session:
 
 def save_session(existing_players: list[Player]) -> None:
     save_dict = {f"Player {(i + 1)}:": p.model_dump() for i, p in enumerate(existing_players)} 
-    with open(PLAYER_FILE, "w") as f:
+    with open(PLAYER_FILE_NAME, "w") as f:
         json.dump(save_dict, f, indent=5)
 
 
 def load_session() -> Session:
     try:
-        with open(PLAYER_FILE, "r") as f:
+        with open(PLAYER_FILE_NAME, "r") as f:
             loaded_dict = json.load(f)
             session = Session()
             session.existing_players = [Player.model_validate(p) for p in loaded_dict.values()]
