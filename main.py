@@ -2,10 +2,11 @@
 
 import json
 import os
+import random
 from barcode import Code128
-from barcode.writer import SVGWriter
+from barcode.writer import ImageWriter
 from dotenv import load_dotenv
-from datetime import datetime, date
+from datetime import date
 from fpdf import FPDF
 from io import BytesIO
 from pydantic import BaseModel, Field, computed_field
@@ -199,7 +200,14 @@ For currently assigned question set (Category: {self.question_bank.category}):
 Questions Correctly Guessed: {self.questions_answered_correctly}
         """
 
-    def generate_questions(self, client: Client, player: "Player", category: str, run_length: int) -> QuestionBank | None:
+    def generate_id(self, existing_question_ids: set) -> str:
+        while True:
+            new_id = str(random.randint(10000000, 99999999))
+            if new_id not in existing_question_ids:
+                existing_question_ids.add(new_id)
+                return new_id
+
+    def generate_questions(self, client: Client, player: "Player", category: str, run_length: int, existing_question_ids: set[str]) -> QuestionBank | None:
         chat = client.chat.create(model="grok-latest")
 
         chat.append(user(f"""\
@@ -216,7 +224,7 @@ Category for questions: {category}."""
         try:
             response, question_bank = chat.parse(QuestionBank)
             for q in question_bank.question_list:
-                q.id = str(uuid4())
+                q.id = self.generate_id(existing_question_ids)
         except Exception as e:
             print("Something went wrong with question generation. Please try again")
             if DEBUG: print(e)
@@ -230,7 +238,6 @@ Category for questions: {category}."""
 
     def generate_pdf(self, player: 'Player') -> FPDF:
         pdf = FPDF(unit="in")
-        svg_writer = SVGWriter()
         text_str = self.generate_text_str(player)
         x = X_BUFFER
         y = Y_BUFFER
@@ -248,9 +255,10 @@ Category for questions: {category}."""
                 x = X_BUFFER
             elif not column1_flag:
                 x = X_BUFFER + BAR_WIDTH + COLUMN_SEPARATION
-            svg_img_bytes = BytesIO()
-            Code128(q, svg_writer).write(svg_img_bytes, options={'text_distance': 3.0, 'font_size': 8}, text=text_str)
-            pdf.image(svg_img_bytes, x=x, y=y, w=w, h=h)
+            img_bytes = BytesIO()
+            img_writer = ImageWriter()
+            Code128(q, img_writer).write(img_bytes, options={'text_distance': 3.0, 'font_size': 3}, text=text_str)
+            pdf.image(img_bytes, x=x, y=y, w=w, h=h)
             y_bump_flag, page_flag = self.set_heigth_and_page(index + 1)
             column1_flag = not column1_flag
             if y_bump_flag:
@@ -588,8 +596,9 @@ class Session:
                 return
         cat = self.get_category(player)
         r_length = self.get_run_length(player)
+        existing_question_ids = set(self.q_p_lookup)
         run = Run()
-        run.question_bank = run.generate_questions(self.client, player, cat, r_length)
+        run.question_bank = run.generate_questions(self.client, player, cat, r_length, existing_question_ids)
         if run.question_bank is None:
             print("\nQuestion generation failed. Player questions not assigned.")
             return
