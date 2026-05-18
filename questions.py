@@ -2,7 +2,7 @@
 The Question data model and all of its pure logic.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 UNANSWERED = "Unanswered"
 CORRECTLY_ANSWERED = "Correctly Answered"
@@ -24,6 +24,8 @@ class Question(BaseModel):
     status: str = UNANSWERED
     id: str = ""
 
+    @computed_field
+    @property
     def all_choices_shuffled(self) -> set[str]:
         """Return all answer options (correct + fakes) in random order
         """

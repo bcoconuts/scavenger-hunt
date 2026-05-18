@@ -45,7 +45,7 @@ def test_all_choices_shuffled_contains_correct_answer():
         answer="Blue",
         fake_answers=["Red", "Yellow", "Orange"]
     )
-    answer_set = q.all_choices_shuffled()
+    answer_set = q.all_choices_shuffled
     assert "Blue" in answer_set
 
 
@@ -55,5 +55,5 @@ def test_all_choices_shuffled_contains_all_four_options():
         answer="Blue",
         fake_answers=["Red", "Yellow", "Orange"]
     )
-    answer_set = q.all_choices_shuffled()
+    answer_set = q.all_choices_shuffled
     assert answer_set == {"Red", "Yellow", "Orange", "Blue"}
