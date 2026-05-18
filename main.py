@@ -27,7 +27,7 @@ from xai_sdk.chat import user
 ## ======================
 
 #DEVELOPMENT
-DEBUG = True
+DEBUG = False
 
 #STRINGS
 YES = "Yes"
@@ -776,7 +776,7 @@ class Session:
 
     def delete_all_score_history(self) -> None:
         player = self.get_user_choice_of_existing_players()
-        if player.run or player.all_time_score > 0:
+        if player.run or player.total_questions_answered > 0:
             warning_prompt = f"\nWARNING: Deleting all score history will delete score history for all questions ever assigned to {player.name} (including current). Would you like to proceed "
             if not get_yes_no_response(warning_prompt):
                 print("\nNo score history deleted. User manually aborted.")
