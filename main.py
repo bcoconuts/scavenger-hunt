@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from datetime import date
 from fpdf import FPDF
 from io import BytesIO
+from PIL import Image
 from pydantic import BaseModel, Field, computed_field
 from utils import (
     get_unique_alpha_response,
@@ -103,14 +104,23 @@ BIRTH_YEAR_RANGE = set(range(CURRENT_YEAR - MAX_AGE, CURRENT_YEAR + 1))
 VALID_MONTHS = set(range(1, 13))
 
 #PDF GENERATION
-X_BUFFER = 0.125
-Y_BUFFER = 0.25
-BAR_WIDTH = 3.875
-BAR_HEIGTH = 1.5
-COLUMN_SEPARATION = 0.25
-ROW_SEPARATION = 0.125
-NAME_LENGTH = 12
-CAT_LENGTH = 20
+DPI = 72
+ROWS = 5 # 9 rows maximum before you begin to alter barcode. recommend 5 for children
+COLUMNS = 2 # 2 column maximum before you begin to alter barcode.
+IMG_WRITER_OPTIONS = {
+    "text_distance": 1.25,
+    "font_size": 3,
+    "module_height": 5,
+    "margin_bottom": 0,
+    "margin_top": 1,
+}
+PAGE_TOP = 0
+PAGE_LENGTH = 11
+PAGE_WIDTH = 8.5
+PAGE_LEFT = 0
+SOLID_DASH_LENGTH = 0.375
+GAP = 0.25
+MAX_BARCODE_CHARS = 22
 
 # FILES
 PLAYER_FILE_NAME = "players.json"
@@ -237,53 +247,88 @@ Category for questions: {category}."""
     # ======================
 
     def generate_pdf(self, player: 'Player') -> FPDF:
-        pdf = FPDF(unit="in")
-        text_str = self.generate_text_str(player)
-        x = X_BUFFER
-        y = Y_BUFFER
-        w = BAR_WIDTH
-        h = BAR_HEIGTH
-        page_flag = True
-        column1_flag = True
-
-        for index, question in enumerate(self.question_bank.question_list):
-            q = question.id
-            if page_flag:
-                pdf.add_page()
-                y = Y_BUFFER
-            if column1_flag:
-                x = X_BUFFER
-            elif not column1_flag:
-                x = X_BUFFER + BAR_WIDTH + COLUMN_SEPARATION
-            img_bytes = BytesIO()
-            img_writer = ImageWriter()
-            Code128(q, img_writer).write(img_bytes, options={'text_distance': 3.0, 'font_size': 3}, text=text_str)
-            pdf.image(img_bytes, x=x, y=y, w=w, h=h)
-            y_bump_flag, page_flag = self.set_heigth_and_page(index + 1)
-            column1_flag = not column1_flag
-            if y_bump_flag:
-                y += BAR_HEIGTH + ROW_SEPARATION
+        pdf = FPDF(unit="in", format="letter")
+        pdf.set_margin(0)
+        pdf.add_page()
+        self._add_barcodes(pdf, player)
+        self._draw_grid(pdf)
         
         return pdf
-
-    def set_heigth_and_page(self, sequence_number: int) -> tuple[bool, bool]:
-        new_page_flag = False
-        y_bump_flag = False
-        if sequence_number % 14 == 0:
-            return (not y_bump_flag, not new_page_flag) 
-        if sequence_number % 2 == 0:
-            return(not y_bump_flag, new_page_flag)
-        return (y_bump_flag, new_page_flag)
     
-    def generate_text_str(self, player: 'Player') -> str:
-        name = player.name 
-        name_str = name if len(name) < NAME_LENGTH else f"{name[:NAME_LENGTH + 1]}..."
-        category = player.run.question_bank.category
-        cat_str = category if len(category) < CAT_LENGTH else f"{category[:CAT_LENGTH + 1]}..."
-        current_date_str = str(date.today())
+    def _add_barcodes(self, pdf: FPDF, player: 'Player') -> None:
+        cell_h = PAGE_LENGTH/ROWS
+        text_str = self._generate_text_str(player)
+        column1_flag = True
+        for question in self.question_bank.question_list:
+            barcode_img = self._generate_barcode(question.id, text_str)
+            barcode_w_whitespace_img = self._add_whitespace(barcode_img, COLUMNS, ROWS, DPI)
+            if column1_flag:
+                column2_y = pdf.get_y()
+                pdf.image(barcode_w_whitespace_img)
+            else:
+                if column2_y + cell_h > PAGE_LENGTH:
+                    column2_y = 0
+                pdf.image(barcode_w_whitespace_img, x=4.25, y=column2_y)
+            column1_flag = not column1_flag
+            if pdf.will_page_break(cell_h):
+                self._draw_grid(pdf)
+
+    def _generate_text_str(self, player: 'Player') -> str:
+        name_str = player.name 
+        cat_str = player.run.question_bank.category
+        current_date_str = str(date.today().month) + "-" + str(date.today().day)
+        new_name = False
+        new_cat = False
+        while len(name_str + cat_str + current_date_str) > MAX_BARCODE_CHARS:
+            if len(cat_str) > MAX_BARCODE_CHARS//3 - 3:
+                cat_str = cat_str[:-1]
+                new_cat = True
+            elif len(name_str) > MAX_BARCODE_CHARS//3 - 3:
+                name_str = name_str[:-1]
+                new_name = True
+            else:
+                break
+        if new_cat:
+            cat_str = cat_str + "..."
+        if new_name:
+            name_str = name_str + "..."
         str_list = [name_str, cat_str, current_date_str]
         text_str = " - ".join(str_list)
         return text_str
+
+    def _generate_barcode(self, code: str, text_str: str | None=None) -> Image:
+            img_bytes = BytesIO()
+            Code128(code, ImageWriter()).write(
+                img_bytes,
+                options=IMG_WRITER_OPTIONS,
+                text=text_str
+            )
+            return Image.open(img_bytes)
+
+    def _add_whitespace(self, image: Image, desired_columns: int, desired_rows: int, target_dpi: int) -> Image:
+        w, h = image.size
+        new_w, new_h = (
+            int(PAGE_WIDTH/desired_columns*target_dpi//1),
+            int(PAGE_LENGTH/desired_rows*target_dpi//1)
+        )
+        image_w_whitespace = Image.new("RGB", (new_w // 1, new_h // 1), "white")
+        image_w_whitespace.paste(
+            image,
+            box=((new_w - w) // 2, (new_h - h) // 2) # center the image
+        )
+        return image_w_whitespace
+
+    def _draw_grid(self, pdf: FPDF) -> None:
+        cell_w = PAGE_WIDTH/COLUMNS
+        cell_h = PAGE_LENGTH/ROWS
+        start_h = cell_h
+        pdf.set_draw_color(200)
+        if COLUMNS > 1:
+            pdf.dashed_line(cell_w, PAGE_TOP, cell_w, PAGE_LENGTH, SOLID_DASH_LENGTH, GAP)
+        for _ in range(4):
+            pdf.dashed_line(PAGE_LEFT, start_h, PAGE_WIDTH, start_h, SOLID_DASH_LENGTH, GAP)
+            start_h += cell_h
+    
 
 
 class Player(BaseModel):
@@ -554,7 +599,7 @@ class Session:
             print("\nNo removable players.")
             return
         player = self.get_user_choice_of_existing_players()
-        if player.run:
+        if player.run or player.total_questions_answered > 0:
             warning_prompt = "\nWARNING: Deleting this player will cause all score history to be deleted. Would you like to proceed "
             if not get_yes_no_response(warning_prompt):
                 print("\nPlayer not deleted. User manually aborted.")
@@ -731,7 +776,7 @@ class Session:
 
     def delete_all_score_history(self) -> None:
         player = self.get_user_choice_of_existing_players()
-        if player.run:
+        if player.run or player.all_time_score > 0:
             warning_prompt = f"\nWARNING: Deleting all score history will delete score history for all questions ever assigned to {player.name} (including current). Would you like to proceed "
             if not get_yes_no_response(warning_prompt):
                 print("\nNo score history deleted. User manually aborted.")
