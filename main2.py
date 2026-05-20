@@ -3,13 +3,14 @@
 import json
 import os
 import random
-from barcode import Code128
-from barcode.writer import ImageWriter
 from dotenv import load_dotenv
 from datetime import date
-from fpdf import FPDF
-from io import BytesIO
-from PIL import Image
+from models import (
+    Question,
+    QuestionBank,
+    Player
+)
+from pdfgen import generate_pdf
 from pydantic import BaseModel, Field, computed_field
 from utils import (
     get_unique_alpha_response,
@@ -103,25 +104,6 @@ CURRENT_YEAR = date.today().year
 BIRTH_YEAR_RANGE = set(range(CURRENT_YEAR - MAX_AGE, CURRENT_YEAR + 1))
 VALID_MONTHS = set(range(1, 13))
 
-#PDF GENERATION
-DPI = 72
-ROWS = 5 # 9 rows maximum before you begin to alter barcode. recommend 5 for children
-COLUMNS = 2 # 2 column maximum before you begin to alter barcode.
-IMG_WRITER_OPTIONS = {
-    "text_distance": 1.25,
-    "font_size": 3,
-    "module_height": 5,
-    "margin_bottom": 0,
-    "margin_top": 1,
-}
-PAGE_TOP = 0
-PAGE_LENGTH = 11
-PAGE_WIDTH = 8.5
-PAGE_LEFT = 0
-SOLID_DASH_LENGTH = 0.375
-GAP = 0.25
-MAX_BARCODE_CHARS = 22
-
 # FILES
 PLAYER_FILE_NAME = "players.json"
 PDF_FILE_NAME = f"_questions_{date.today()}.pdf"
@@ -130,308 +112,38 @@ PDF_FILE_NAME = f"_questions_{date.today()}.pdf"
 ## ======================
 ## GAME CLASSES
 ## ======================
-
-class Question(BaseModel):
-    question: str = Field(description="Question")
-    answer: str = Field(description="Answer")
-    fake_answers: list[str] = Field(
-        description="""List of 3 incorrect answers used for 
-        the other options in a multiple choice question"""
-    )
-    status: str = UNANSWERED
-    id: str = ""
-
-    def display_all_question_content(self) -> None:
-        fake_ans = "\n              ".join(self.fake_answers)
-        print(f"""\
-    Question: {self.question}
-      Answer: {self.answer}
-Fake Answers: {fake_ans}
-      Status: {self.status}
-        """
-        )
-        
-    def edit_status(self) -> None:
-        prompt = "Which status would you like to select?: "
-        choice = get_user_choice_from_menu(QUESTION_STATUSES, numbered=True, header="\nSTATUSES:", prompt=prompt)
-        self.status = QUESTION_STATUSES[choice]
-
-    def get_user_choice_of_mult_choice_question(self) -> str:
-        all_answers = {a for a in self.fake_answers}
-        all_answers.add(self.answer)
-        answer_dict = {index + 1: a for index, a in enumerate(all_answers)}
-        prompt = "What is your final answer?: "
-        choice = get_user_choice_from_menu(answer_dict, numbered=True, header=f"\n{self.question}", prompt=prompt)
-        answer = answer_dict[choice]
-        return answer
     
-    def get_user_choice_of_ask_answer_question(self) -> bool:
-        prompt = "Was the question answered correctly?: "
-        choice = get_user_choice_from_menu(YES_NO_DICT, numbered=True, header=f"\n{self.question} [Answer: {self.answer}]", prompt=prompt)
-        if YES_NO_DICT[choice] == YES:
-            return True
-        else:
-            return False
+def generate_id(existing_question_ids: set) -> str:
+    while True:
+        new_id = str(random.randint(10000000, 99999999))
+        if new_id not in existing_question_ids:
+            existing_question_ids.add(new_id)
+            return new_id
 
-class QuestionBank(BaseModel):
-    question_list: list[Question] = Field(description="List of the questions generated")
-    category: str = Field(description="Category associated with questions generated")
+def generate_questions(client: Client, player: "Player", category: str, run_length: int, existing_question_ids: set[str]) -> QuestionBank:
+    chat = client.chat.create(model="grok-latest")
 
-    def display_questions(self) -> None:
-        print()
-        for index, q in enumerate(self.question_list):
-            print(f"=== No. {index + 1} ===")
-            q.display_all_question_content()
-    
-    def get_user_choice_of_existing_questions(self) -> Question:
-        question_dict = {q.question: q for q in self.question_list}
-        prompt = "Which question would you like to select?: "
-        choice = get_user_choice_from_menu(question_dict, header="\nQUESTIONS:", prompt=prompt)
-        question = self.question_list[choice - 1]
-
-        return question
-    
-
-class Run(BaseModel):
-    question_bank: QuestionBank | None = None
-    date_generated: str = Field(default_factory=lambda: str(date.today()))
-    questions_answered_correctly: int = 0
-    questions_attempted: int = 0
-
-    @computed_field
-    @property
-    def run_score(self) -> str:
-        if not self.question_bank:
-            return "No Questions Assigned"
-        return f"""\
-For currently assigned question set (Category: {self.question_bank.category}):
-   Total Questions Assigned: {len(self.question_bank.question_list)}
-        Questions Attempted: {self.questions_attempted}
-Questions Correctly Guessed: {self.questions_answered_correctly}
-        """
-
-    def generate_id(self, existing_question_ids: set) -> str:
-        while True:
-            new_id = str(random.randint(10000000, 99999999))
-            if new_id not in existing_question_ids:
-                existing_question_ids.add(new_id)
-                return new_id
-
-    def generate_questions(self, client: Client, player: "Player", category: str, run_length: int, existing_question_ids: set[str]) -> QuestionBank | None:
-        chat = client.chat.create(model="grok-latest")
-
-        chat.append(user(f"""\
+    chat.append(user(f"""\
 Generate {run_length} trivia questions.
 
 Questions aimed at {player.age_bucket} 
 
 Category for questions: {category}."""
-            )
         )
+    )
 
-        # The parse method returns a tuple of the full response object as well as the parsed pydantic object.
+    # The parse method returns a tuple of the full response object as well as the parsed pydantic object.
 
-        try:
-            response, question_bank = chat.parse(QuestionBank)
-            for q in question_bank.question_list:
-                q.id = self.generate_id(existing_question_ids)
-        except Exception as e:
-            print("Something went wrong with question generation. Please try again")
-            if DEBUG: print(e)
-            return None
+    try:
+        response, question_bank = chat.parse(QuestionBank)
+        for q in question_bank.question_list:
+            q.question_id = generate_id(existing_question_ids)
+    except Exception as e:
+        print("Something went wrong with question generation. Please try again")
+        if DEBUG: print(e)
+        question_bank = QuestionBank(category="General")
 
-        return question_bank
-    
-    # ======================
-    # PDF GENERATION
-    # ======================
-
-    def generate_pdf(self, player: 'Player') -> FPDF:
-        pdf = FPDF(unit="in", format="letter")
-        pdf.set_margin(0)
-        pdf.add_page()
-        self._add_barcodes(pdf, player)
-        self._draw_grid(pdf)
-        
-        return pdf
-    
-    def _add_barcodes(self, pdf: FPDF, player: 'Player') -> None:
-        cell_h = PAGE_LENGTH/ROWS
-        text_str = self._generate_text_str(player)
-        column1_flag = True
-        for question in self.question_bank.question_list: # pyright: ignore[reportOptionalMemberAccess]
-            barcode_img = self._generate_barcode(question.id, text_str)
-            barcode_w_whitespace_img = self._add_whitespace(barcode_img, COLUMNS, ROWS, DPI)
-            if column1_flag:
-                column2_y = pdf.get_y()
-                pdf.image(barcode_w_whitespace_img)
-            else:
-                if column2_y + cell_h > PAGE_LENGTH:
-                    column2_y = 0
-                pdf.image(barcode_w_whitespace_img, x=4.25, y=column2_y)
-            column1_flag = not column1_flag
-            if pdf.will_page_break(cell_h):
-                self._draw_grid(pdf)
-
-    def _generate_text_str(self, player: 'Player') -> str:
-        name_str = player.name 
-        cat_str = player.run.question_bank.category # pyright: ignore[reportOptionalMemberAccess]
-        current_date_str = str(date.today().month) + "-" + str(date.today().day)
-        new_name = False
-        new_cat = False
-        while len(name_str + cat_str + current_date_str) > MAX_BARCODE_CHARS:
-            if len(cat_str) > MAX_BARCODE_CHARS//3 - 3:
-                cat_str = cat_str[:-1]
-                new_cat = True
-            elif len(name_str) > MAX_BARCODE_CHARS//3 - 3:
-                name_str = name_str[:-1]
-                new_name = True
-            else:
-                break
-        if new_cat:
-            cat_str = cat_str + "..."
-        if new_name:
-            name_str = name_str + "..."
-        str_list = [name_str, cat_str, current_date_str]
-        text_str = " - ".join(str_list)
-        return text_str
-
-    def _generate_barcode(self, code: str, text_str: str | None=None) -> Image.Image:
-            img_bytes = BytesIO()
-            Code128(code, ImageWriter()).write(
-                img_bytes,
-                options=IMG_WRITER_OPTIONS,
-                text=text_str
-            )
-            return Image.open(img_bytes)
-
-    def _add_whitespace(self, image: Image.Image, desired_columns: int, desired_rows: int, target_dpi: int) -> Image.Image:
-        w, h = image.size
-        new_w, new_h = (
-            int(PAGE_WIDTH/desired_columns*target_dpi//1),
-            int(PAGE_LENGTH/desired_rows*target_dpi//1)
-        )
-        image_w_whitespace = Image.new("RGB", (new_w // 1, new_h // 1), "white")
-        image_w_whitespace.paste(
-            image,
-            box=((new_w - w) // 2, (new_h - h) // 2) # center the image
-        )
-        return image_w_whitespace
-
-    def _draw_grid(self, pdf: FPDF) -> None:
-        cell_w = PAGE_WIDTH/COLUMNS
-        cell_h = PAGE_LENGTH/ROWS
-        start_h = cell_h
-        pdf.set_draw_color(200)
-        if COLUMNS > 1:
-            pdf.dashed_line(cell_w, PAGE_TOP, cell_w, PAGE_LENGTH, SOLID_DASH_LENGTH, GAP)
-        for _ in range(4):
-            pdf.dashed_line(PAGE_LEFT, start_h, PAGE_WIDTH, start_h, SOLID_DASH_LENGTH, GAP)
-            start_h += cell_h
-    
-
-
-class Player(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    years_old: int = 0
-    months_old: int = 0
-    name: str = ""
-    run: Run | None = None
-    total_questions_answered: int = 0
-    total_questions_correctly_answered: int = 0
-
-    @computed_field
-    @property
-    def age_bucket(self) -> str:
-        if self.years_old <= 3:
-            return (
-                "a bright toddler aged 2-3. They know basic colors, can count to 10+, "
-                "know common animals and their sounds, and understand simple stories. "
-                "Questions should challenge the top 25 percent of kids this age — not softballs."
-            )
-        elif self.years_old <= 5:
-            return (
-                "a bright, well-educated preschooler aged 4-5. They are beginning to read, "
-                "know numbers past 20, understand basic opposites, seasons, and simple science "
-                "Questions should challenge the top 25 percent of kids this age — not softballs."
-            )
-        elif self.years_old <= 7:
-            return (
-                "a bright, well-educated early elementary child aged 6-7. They can read simple "
-                "books, do basic addition and subtraction, and know geography basics. "
-                "Questions should challenge the top 25 percent of kids this age — not softballs."
-            )
-        elif self.years_old <= 10:
-            return (
-                "a bright, well-educated elementary child aged 8-10. They read fluently, "
-                "understand basic history, multiplication, and science concepts. "
-                "Questions should challenge the top 25 percent of kids this age — not softballs."
-            )
-        elif self.years_old <= 13:
-            return (
-                "a bright, well-educated preteen aged 11-13. They have solid general knowledge "
-                "across history, science, geography and literature. "
-                "Questions should genuinely challenge the top 25 percent of kids this age."
-            )
-        elif self.years_old <= 18:
-            return (
-                "a teenager aged 14-18. They have solid general knowledge "
-                "across history, science, math, geography and literature. "
-                "Questions should genuinely challenge the top 25 percent of kids this age."
-            )
-        elif self.years_old <= 22:
-            return (
-                "a college educated person aged 19-22. They have solid general knowledge "
-                "across history, science, math, geography and literature. "
-                "Questions should genuinely challenge the top 25 percent of people this age."
-            )
-        else:
-            return (
-                "an adult with a college eductaion. They have solid general knowledge "
-                "across history, science, math, geography and literature. "
-                "Questions should genuinely challenge the top 50 percent of college educated adults."
-            )
-        
-    @computed_field
-    @property
-    def all_time_score(self) -> str:
-        return f"""\
-For all questions ever attempted by {self.name}:
-        Questions Attempted: {self.total_questions_answered}
-Questions Correctly Guessed: {self.total_questions_correctly_answered}
-        """
-    
-    def edit_player_attributes(self, existing_names: set) -> None:
-        self.edit_player_name(existing_names)
-        self.edit_player_age()
-        print(f"Player Information Saved.\n    Name: {self.name}, Age: {self.years_old}")
-
-    def edit_player_name(self, existing_names: set) -> None:
-        prompt = "\nWhat should the player be called?: "
-        self.name = get_unique_alpha_response(existing_names, prompt, str.title)
-
-    def edit_player_age(self) -> None:
-        valid_year_keys = BIRTH_YEAR_RANGE
-        year_prompt = f"What year was {self.name} born? Select a year between {min(BIRTH_YEAR_RANGE)} - {max(BIRTH_YEAR_RANGE)}: "
-        new_birth_year = get_valid_int_response(valid_year_keys, year_prompt)
-
-        valid_month_keys = VALID_MONTHS
-        month_prompt = f"What month was {self.name} born? Select between {min(VALID_MONTHS)} - {max(VALID_MONTHS)}: "
-        new_birth_month = get_valid_int_response(valid_month_keys, month_prompt)
-
-        today = date.today()
-        total_months = ((today.year - new_birth_year) * 12) + (today.month - new_birth_month)
-
-        self.years_old = total_months//12
-        self.months_old = total_months%12
-
-    def display_player_info(self) -> None:
-        print(f"""\
-              Name: {self.name}
-               Age: {self.years_old}
-Questions Assigned: {True if self.run else False}
-"""
-        )
+    return question_bank
 
 
 class Session:
@@ -444,7 +156,8 @@ class Session:
         load_dotenv()
         self.client: Client = Client(api_key=os.getenv("XAI_API_KEY"))
         self.existing_players: list[Player] = []
-        self.q_p_lookup: dict[str, str] = {} # question.id -> player.id
+        self.existing_qbanks: list[QuestionBank] = []
+        self.player_id_to_question_bank_lookup: dict[str, QuestionBank] = {} # Player.player_id -> QuestionBank.
 
     def greet_user(self) -> None:
         print("Hello! Welcome to The Inquisitor!. Here's how the game works.....")
@@ -461,7 +174,7 @@ class Session:
         return player
     
     def get_user_choice_of_existing_players_with_questions(self) -> Player:
-        player_list = [p for p in self.existing_players if p.run]
+        player_list = [p for p in self.existing_players if self.player_id_to_question_bank_lookup[p.player_id]]
         player_dict = {player.name: player for player in player_list}
         player_prompt = "Which player would you like to select?: "
         choice = get_user_choice_from_menu(player_dict, header="\nPLAYERS:", prompt=player_prompt)
@@ -506,7 +219,7 @@ class Session:
         if action:
             flag = action()
             self.existing_players.sort(key= lambda p: p.name)
-            save_session(self.existing_players)
+            save_session(self.existing_players, self.player_id_to_question_bank_lookup)
             if flag == None:
                 return True
             else:
@@ -527,7 +240,7 @@ class Session:
         action = actions.get(choice)
         if action:
             flag = action()
-            save_session(self.existing_players)
+            save_session(self.existing_players, self.player_id_to_question_bank_lookup)
             if flag == None:
                 return True
             else:
@@ -546,7 +259,7 @@ class Session:
         action = actions.get(choice)
         if action:
             flag = action()
-            save_session(self.existing_players)
+            save_session(self.existing_players, self.player_id_to_question_bank_lookup)
             if flag == None:
                 return True
             else:
@@ -581,7 +294,7 @@ class Session:
     # ======================
 
     def add_player(self) -> None:
-        fresh_player = Player()
+        fresh_player = Player(birth_date=(date.today()), name="Newplayer")
         existing_names = {p.name for p in self.existing_players}
         fresh_player.edit_player_attributes(existing_names)
         self.existing_players.append(fresh_player)
@@ -599,7 +312,7 @@ class Session:
             print("\nNo removable players.")
             return
         player = self.get_user_choice_of_existing_players()
-        if player.run or player.total_questions_answered > 0:
+        if self.player_id_to_question_bank_lookup[player.player_id] or player.total_questions_answered > 0:
             warning_prompt = "\nWARNING: Deleting this player will cause all score history to be deleted. Would you like to proceed "
             if not get_yes_no_response(warning_prompt):
                 print("\nPlayer not deleted. User manually aborted.")
@@ -611,7 +324,7 @@ class Session:
         print()
         for index, player in enumerate(self.existing_players):
             print(f"""=== No. {index + 1} ===""")
-            player.display_player_info()
+            pass #TODO
 
     # ======================
     # RUN MANAGEMENT
@@ -634,41 +347,42 @@ class Session:
             print("\nNo players to assign questions to.")
             return
         player = self.get_user_choice_of_existing_players()
-        if player.run:
+        if self.player_id_to_question_bank_lookup[player.player_id]:
             warning_prompt = "\nWARNING: Assigning new questions will delete any unanswered questions. Would you like to proceed "
             if not get_yes_no_response(warning_prompt):
                 print("\nNo questions generated. User manually aborted.")
                 return
         cat = self.get_category(player)
         r_length = self.get_run_length(player)
-        existing_question_ids = set(self.q_p_lookup)
-        run = Run()
-        run.question_bank = run.generate_questions(self.client, player, cat, r_length, existing_question_ids)
-        if run.question_bank is None:
+        existing_question_ids = set()
+        for qbank in self.existing_qbanks:
+            for q in qbank.question_list:
+                existing_question_ids.add(q.question_id)
+        question_bank = generate_questions(self.client, player, cat, r_length, existing_question_ids)
+        if not any(question_bank.question_list):
             print("\nQuestion generation failed. Player questions not assigned.")
             return
-        for q in run.question_bank.question_list:
-            self.q_p_lookup[q.id] = player.id
-        player.run = run
-    
+        self.player_id_to_question_bank_lookup[player.player_id] = question_bank
+        
     def generate_question_pdf(self) -> None:
-        if not any([p.run for p in self.existing_players]):
+        if not any([v for v in self.player_id_to_question_bank_lookup.values()]):
             print("\nNo players available to print questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
-        pdf = player.run.generate_pdf(player) # pyright: ignore[reportOptionalMemberAccess]
+        question_bank = self.player_id_to_question_bank_lookup[player.player_id]
+        pdf = generate_pdf(player, question_bank)
         pdf.output(f"{player.name}" + PDF_FILE_NAME)
 
 
     def display_questions_for_player(self) -> None:
-        if not any([p.run for p in self.existing_players]):
+        if not any([v for v in self.player_id_to_question_bank_lookup.values()]):
             print("\nNo players available to view questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
         player.run.question_bank.display_questions() # pyright: ignore[reportOptionalMemberAccess]
     
     def delete_question(self) -> None:
-        if not any([p.run for p in self.existing_players]):
+        if not any([v for v in self.player_id_to_question_bank_lookup.values()]):
             print("\nNo players available to remove questions for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
@@ -680,7 +394,7 @@ class Session:
         print(f'\nQuestion removed.')
     
     def edit_question_status(self) -> None:
-        if not any([p.run for p in self.existing_players]):
+        if not any([v for v in self.player_id_to_question_bank_lookup.values()]):
             print("\nNo players available to edit question statuses for.")
             return
         player = self.get_user_choice_of_existing_players_with_questions()
@@ -791,21 +505,24 @@ class Session:
 ## FILE I/O
 ## ======================
 
-def save_session(existing_players: list[Player]) -> None:
-    save_dict = {f"Player {(i + 1)}:": p.model_dump() for i, p in enumerate(existing_players)} 
+def save_session(existing_players: list[Player], player_id_to_qbank_lookup: dict[str, QuestionBank]) -> None:
+    session_dict = {}
+    for index, player in enumerate(existing_players):
+        session_dict[index] = {"player": player, "qbank": player_id_to_qbank_lookup[player.player_id]}
     with open(PLAYER_FILE_NAME, "w") as f:
-        json.dump(save_dict, f, indent=5)
+        json.dump(session_dict, f, indent=4)
 
 
 def load_session() -> Session:
     try:
         with open(PLAYER_FILE_NAME, "r") as f:
-            loaded_dict = json.load(f)
+            session_dict: dict[str, dict] = json.load(f)
             session = Session()
-            session.existing_players = [Player.model_validate(p) for p in loaded_dict.values()]
-        playerid_player_dict = {p.id: p.run.question_bank.question_list for p in session.existing_players if p.run} # pyright: ignore[reportOptionalMemberAccess]
-        session.q_p_lookup = {q.id: playerid for playerid, ls in playerid_player_dict.items() for q in ls}
-
+            for k in session_dict:
+                player: Player = session_dict[k]["player"]
+                qbank: QuestionBank = session_dict[k]["qbank"]
+                session.existing_players.append(player)
+                session.player_id_to_question_bank_lookup[player.player_id] = qbank
     except FileNotFoundError:
         session = Session()
     
