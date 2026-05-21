@@ -105,20 +105,6 @@ def get_user_int_choice_from_menu(target_dict: dict, numbered: bool=False, heade
     return choice
 
 
-def get_user_str_choice_from_menu(target_dict: dict, numbered: bool=False, header="\nOPTIONS", prompt="What would you like to do?: ") -> str:
-    if numbered:
-        display_options_from_numbered_dict(header, target_dict)
-        new_dict = target_dict
-    else:
-        display_options_from_dict(header, target_dict)
-        new_dict = {(index + 1): k for index, k in enumerate(target_dict)}
-
-    int_choice = get_key_int_choice_from_dict(prompt, target_dict)
-    str_choice = new_dict[int_choice]
-    
-    return str_choice
-
-
 def display_options_from_numbered_dict(header: str, target_dict: dict[int, str]) -> None:
     '''
     Display options to user for a dict formatted {Option Number: Option Name}.

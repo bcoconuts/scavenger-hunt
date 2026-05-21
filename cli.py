@@ -8,7 +8,8 @@ from models import (
 from utils import (
     display_options_from_dict,
     display_options_from_numbered_dict,
-    get_key_int_choice_from_dict
+    get_key_int_choice_from_dict,
+    get_unique_alpha_response
 )
 
 def greet_user() -> None:
@@ -19,13 +20,13 @@ def display_msg(msg: str) -> None:
     print(msg)
 
 
-def get_specific_player(player_dict: dict[str, Player]) -> Player:
+def get_specific_player(player_dict: dict[str, Player]) -> Player | None:
     """Returns a player based on user selection of one player 
     from a given dict of player.names: players
     """
     player_prompt = "Which player would you like to select?: "
     choice = get_user_str_choice_from_menu(player_dict, header="\nPLAYERS:", prompt=player_prompt)
-    player = player_dict[choice]
+    player = player_dict.get(choice)
     return player
 
 
@@ -41,3 +42,8 @@ def get_user_str_choice_from_menu(target_dict: dict, numbered: bool=False, heade
     str_choice = new_dict[int_choice]
     
     return str_choice
+
+def get_player_name(existing_names: set[str]) -> str:
+    prompt = "\nWhat should the player be called?: "
+    name = get_unique_alpha_response(existing_names, prompt, str.title)
+    return name

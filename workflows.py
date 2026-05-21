@@ -2,21 +2,26 @@
 
 
 from constants import STRINGS as S
-import session
+from session import Session
+from models import Player
+import cli
+import storage
+from typing import Callable
+
+UI=cli
+
+# ======================
+# USER CHOICES & MENUS
+# ======================
 
 
-    # ======================
-    # USER CHOICES & MENUS
-    # ======================
+def _get_user_choice_of_existing_players(session: Session, ui, filter: Callable[[Player], bool] | None=None) -> Player | None:
+    player_dict = session.playername_player_dict(filter=filter)
+    player = ui.get_specific_player(player_dict)
+    return player
+        
 
-
-
-
-def _get_user_choice_of_existing_players(players_have_qbank=False) -> Player:
-    players = 
-    return cli.get_specific_player(player_dict)
-
-def route_menu_actions(self) -> None:
+def route_menu_actions(session: Session, ui) -> None:
     S.MAIN_MENU = {
         S.MANAGE_PLAYERS: {
             S.ADD_PLAYER: add_player,
@@ -49,21 +54,46 @@ def route_menu_actions(self) -> None:
     
     main_running = True
     while main_running:
-        choice = get_user_str_choice_from_menu(S.MAIN_MENU, header=f"\n{S.MAIN_MENU}")
+        choice = ui.get_user_str_choice_from_menu(S.MAIN_MENU, header=f"\n{S.MAIN_MENU}")
         if choice == S.EXIT:
             main_running = S.MAIN_MENU[choice]()
         else:
             running = True
             while running:
-                sub_choice = get_user_str_choice_from_menu(S.MAIN_MENU[choice], header=f"\n{choice}")
+                sub_choice = ui.get_user_str_choice_from_menu(S.MAIN_MENU[choice], header=f"\n{choice}")
                 running = S.MAIN_MENU[choice][sub_choice]()
                 if choice != S.ANSWER_QUESTIONS:
-                    storage.save_session(self.existing_players, self.player_id_to_question_bank_lookup)
+                    storage.save_session(session.existing_players, session.player_id_to_question_bank_lookup)
+
 
 def back():
     """Returns False to break out of the current submenu loop."""
     return False
 
+
 def exit():
     """Returns False to break out of the main menu loop."""
     return False
+
+
+# ======================
+# PLAYER MANAGEMENT
+# ======================
+
+
+def edit_player(session: Session, ui) -> bool:
+    player = _get_user_choice_of_existing_players(session, ui)
+    if player is None:
+        ui.display_msg("No available players to choose from")
+        return False
+    existing_names = session.player_name_set()
+    if existing_names is None:
+        ui.display_msg("Error: Players exist, but Player name cannot be accessed. "
+        "Manually record player scores, then delete and re-add player")
+        return False
+    existing_names.remove(player.name)
+    new_name = ui.get_player_name(existing_names)
+    player.name = new_name
+    new_birth_date = ui.get_birth_date(player)
+    player.birth_date = new_birth_date
+    return True

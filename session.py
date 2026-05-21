@@ -48,17 +48,22 @@ class Session:
         """Predicate: does this player have questions assigned?"""
         return self.player_id_to_question_bank_lookup.get(player.player_id) is not None
 
-    def get_players(self, filter: Callable[[Player], bool] | None=None) -> dict[str, Player]:
+    def playername_player_dict(self, filter: Callable[[Player], bool] | None=None) -> dict[str, Player] | None:
+        """Return a dict of player.name: Player if any exist in existing players, else return None.
+        Filterable to only build dict of players that matches filter condition.
+        """
         if filter is None:
             return {p.name: p for p in self.existing_players}
         return {p.name: p for p in self.existing_players if filter(p)}
-
-    def get_user_choice_of_existing_players(self, players_have_qbank=False) -> Player:
-        if players_have_qbank:
-            player_dict = {p.name: p for p in self.existing_players if self.player_id_to_question_bank_lookup[p.player_id]}
-        else:
-            player_dict = {p.name: p for p in self.existing_players}  
-        return cli.get_specific_player(player_dict)
+    
+    def player_name_set(self, filter: Callable[[Player], bool] | None=None) -> set[str] | None:
+        """Return a set of existing player names if any exist in existing players, else return None.
+        Filterable to only build set of players that matches filter condition.
+        """
+        if filter is None:
+            return {p.name for p in self.existing_players}
+        return {p.name for p in self.existing_players if filter(p)}
+        
     
     def route_menu_actions(self) -> None:
         S.MAIN_MENU = {
