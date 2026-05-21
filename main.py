@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, computed_field
 from utils import (
     get_unique_alpha_response,
     get_valid_int_response,
-    get_user_choice_from_menu,
+    get_user_int_choice_from_menu,
     get_yes_no_response
 )
 from uuid import uuid4
@@ -153,7 +153,7 @@ Fake Answers: {fake_ans}
         
     def edit_status(self) -> None:
         prompt = "Which status would you like to select?: "
-        choice = get_user_choice_from_menu(QUESTION_STATUSES, numbered=True, header="\nSTATUSES:", prompt=prompt)
+        choice = get_user_int_choice_from_menu(QUESTION_STATUSES, numbered=True, header="\nSTATUSES:", prompt=prompt)
         self.status = QUESTION_STATUSES[choice]
 
     def get_user_choice_of_mult_choice_question(self) -> str:
@@ -161,13 +161,13 @@ Fake Answers: {fake_ans}
         all_answers.add(self.answer)
         answer_dict = {index + 1: a for index, a in enumerate(all_answers)}
         prompt = "What is your final answer?: "
-        choice = get_user_choice_from_menu(answer_dict, numbered=True, header=f"\n{self.question}", prompt=prompt)
+        choice = get_user_int_choice_from_menu(answer_dict, numbered=True, header=f"\n{self.question}", prompt=prompt)
         answer = answer_dict[choice]
         return answer
     
     def get_user_choice_of_ask_answer_question(self) -> bool:
         prompt = "Was the question answered correctly?: "
-        choice = get_user_choice_from_menu(YES_NO_DICT, numbered=True, header=f"\n{self.question} [Answer: {self.answer}]", prompt=prompt)
+        choice = get_user_int_choice_from_menu(YES_NO_DICT, numbered=True, header=f"\n{self.question} [Answer: {self.answer}]", prompt=prompt)
         if YES_NO_DICT[choice] == YES:
             return True
         else:
@@ -186,7 +186,7 @@ class QuestionBank(BaseModel):
     def get_user_choice_of_existing_questions(self) -> Question:
         question_dict = {q.question: q for q in self.question_list}
         prompt = "Which question would you like to select?: "
-        choice = get_user_choice_from_menu(question_dict, header="\nQUESTIONS:", prompt=prompt)
+        choice = get_user_int_choice_from_menu(question_dict, header="\nQUESTIONS:", prompt=prompt)
         question = self.question_list[choice - 1]
 
         return question
@@ -456,7 +456,7 @@ class Session:
     def get_user_choice_of_existing_players(self) -> Player:
         player_dict = {player.name: player for player in self.existing_players}
         player_prompt = "Which player would you like to select?: "
-        choice = get_user_choice_from_menu(player_dict, header="\nPLAYERS:", prompt=player_prompt)
+        choice = get_user_int_choice_from_menu(player_dict, header="\nPLAYERS:", prompt=player_prompt)
         player = self.existing_players[choice - 1]
         return player
     
@@ -464,12 +464,12 @@ class Session:
         player_list = [p for p in self.existing_players if p.run]
         player_dict = {player.name: player for player in player_list}
         player_prompt = "Which player would you like to select?: "
-        choice = get_user_choice_from_menu(player_dict, header="\nPLAYERS:", prompt=player_prompt)
+        choice = get_user_int_choice_from_menu(player_dict, header="\nPLAYERS:", prompt=player_prompt)
         player = player_list[choice - 1]
         return player
     
     def route_main_menu_actions(self) -> bool:
-        choice = get_user_choice_from_menu(CHOICES, header="\nMAIN MENU")
+        choice = get_user_int_choice_from_menu(CHOICES, header="\nMAIN MENU")
         actions = {
             1: self.route_player_management_menu_actions,
             2: self.route_run_management_menu_actions,
@@ -493,7 +493,7 @@ class Session:
         return True
     
     def route_player_management_menu_actions(self) -> bool:
-        choice = get_user_choice_from_menu(CHOICES[MANAGE_PLAYERS], numbered=True, header="\nMANAGE PLAYERS")
+        choice = get_user_int_choice_from_menu(CHOICES[MANAGE_PLAYERS], numbered=True, header="\nMANAGE PLAYERS")
         actions = {
             1: self.add_player,
             2: self.edit_player,
@@ -514,7 +514,7 @@ class Session:
         return True
 
     def route_run_management_menu_actions(self) -> bool:
-        choice = get_user_choice_from_menu(CHOICES[MANAGE_QUESTIONS], numbered=True, header="\nMANAGE QUESTIONS")
+        choice = get_user_int_choice_from_menu(CHOICES[MANAGE_QUESTIONS], numbered=True, header="\nMANAGE QUESTIONS")
         actions = {
             1: self.start_new_run_for_player,
             2: self.generate_question_pdf,
@@ -535,7 +535,7 @@ class Session:
         return True
     
     def route_score_management_menu_actions(self) -> bool:
-        choice = get_user_choice_from_menu(CHOICES[MANAGE_SCORES], numbered=True, header="\nMANAGE SCORES")
+        choice = get_user_int_choice_from_menu(CHOICES[MANAGE_SCORES], numbered=True, header="\nMANAGE SCORES")
         actions = {
             1: self.view_scores,
             2: self.delete_current_run_score_history,
@@ -554,7 +554,7 @@ class Session:
         return True
 
     def route_play_game_menu_actions(self) -> bool:
-        choice = get_user_choice_from_menu(CHOICES[ANSWER_QUESTIONS], numbered=True, header="\nGAME TYPE")
+        choice = get_user_int_choice_from_menu(CHOICES[ANSWER_QUESTIONS], numbered=True, header="\nGAME TYPE")
         actions = {
             1: lambda: self.run_game_loop(ask_answer_flag=False),
             2: lambda: self.run_game_loop(ask_answer_flag=True),

@@ -73,6 +73,10 @@ class QuestionBank(BaseModel):
         question_map = {q.question_id: q for q in self.question_list}
         return question_map
 
+    def question_id_list(self) -> list[str]:
+        question_id_list = [q.question_id for q in self.question_list]
+        return question_id_list
+
 
 class Player(BaseModel):
     player_id: str = Field(

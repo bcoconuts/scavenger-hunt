@@ -94,7 +94,7 @@ def get_key_int_choice_from_dict(prompt: str, target_dict: dict) -> int:
     return choice
 
 
-def get_user_choice_from_menu(target_dict: dict, numbered: bool=False, header="\nOPTIONS", prompt="What would you like to do?: ") -> int:
+def get_user_int_choice_from_menu(target_dict: dict, numbered: bool=False, header="\nOPTIONS", prompt="What would you like to do?: ") -> int:
     if numbered:
         display_options_from_numbered_dict(header, target_dict)
     else:
@@ -103,6 +103,20 @@ def get_user_choice_from_menu(target_dict: dict, numbered: bool=False, header="\
     choice = get_key_int_choice_from_dict(prompt, target_dict)
     
     return choice
+
+
+def get_user_str_choice_from_menu(target_dict: dict, numbered: bool=False, header="\nOPTIONS", prompt="What would you like to do?: ") -> str:
+    if numbered:
+        display_options_from_numbered_dict(header, target_dict)
+        new_dict = target_dict
+    else:
+        display_options_from_dict(header, target_dict)
+        new_dict = {(index + 1): k for index, k in enumerate(target_dict)}
+
+    int_choice = get_key_int_choice_from_dict(prompt, target_dict)
+    str_choice = new_dict[int_choice]
+    
+    return str_choice
 
 
 def display_options_from_numbered_dict(header: str, target_dict: dict[int, str]) -> None:
@@ -142,10 +156,10 @@ def get_yes_no_response(prompt: str) -> bool:
         True: if player selects yes ("y").
         False: if player selects no ("n").
     '''
-    options = {"y", "n"}
+    options = ["y", "n"]
     prompt_end = construct_prompt_ending(options)
     full_prompt = prompt + prompt_end
-    choice = get_valid_str_response(options, full_prompt)
+    choice = get_valid_str_response(set(options), full_prompt)
     if choice == 'y':
         return True
     else:
