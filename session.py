@@ -2,27 +2,17 @@
 Session class for scavanger hunt that manages data models
 """
 
-import cli
 import os
-import storage
 from constants import (
     STRINGS as S,
 )
-from datetime import date
 from dotenv import load_dotenv
 from models import (
     Question,
     QuestionBank,
     Player
 )
-from pdfgen import generate_pdf
 from typing import Callable
-from utils import (
-    get_unique_alpha_response,
-    get_valid_int_response,
-    get_user_str_choice_from_menu,
-    get_yes_no_response
-)
 from xai_sdk import Client
 
 
@@ -37,18 +27,13 @@ class Session:
         self.client: Client = Client(api_key=os.getenv("XAI_API_KEY"))
         self.existing_players: list[Player] = []
         self.existing_qbanks: list[QuestionBank] = []
-        self.player_id_to_question_bank_lookup: dict[str, QuestionBank] = {} # Player.player_id -> QuestionBank.
-
-
-    # ======================
-    # USER CHOICES & MENUS
-    # ======================
+        self.player_id_to_question_bank_lookup: dict[str, QuestionBank | None] = {} # Player.player_id -> QuestionBank.
 
     def has_qbank(self, player: Player) -> bool:
         """Predicate: does this player have questions assigned?"""
         return self.player_id_to_question_bank_lookup.get(player.player_id) is not None
 
-    def playername_player_dict(self, filter: Callable[[Player], bool] | None=None) -> dict[str, Player] | None:
+    def playername_player_dict(self, filter: Callable[[Player], bool] | None=None) -> dict[str, Player]:
         """Return a dict of player.name: Player if any exist in existing players, else return None.
         Filterable to only build dict of players that matches filter condition.
         """
@@ -56,103 +41,24 @@ class Session:
             return {p.name: p for p in self.existing_players}
         return {p.name: p for p in self.existing_players if filter(p)}
     
-    def player_name_set(self, filter: Callable[[Player], bool] | None=None) -> set[str] | None:
+    def player_name_set(self, filter: Callable[[Player], bool] | None=None) -> set[str]:
         """Return a set of existing player names if any exist in existing players, else return None.
         Filterable to only build set of players that matches filter condition.
         """
         if filter is None:
             return {p.name for p in self.existing_players}
-        return {p.name for p in self.existing_players if filter(p)}
-        
-    
-    def route_menu_actions(self) -> None:
-        S.MAIN_MENU = {
-            S.MANAGE_PLAYERS: {
-                S.ADD_PLAYER: self.add_player,
-                S.EDIT_PLAYER: self.edit_player,
-                S.REMOVE_PLAYER: self.remove_player,
-                S.VIEW_PLAYERS: self.view_players,
-                S.BACK: self.back
-            },
-            S.MANAGE_QUESTIONS: {
-                S.ASSIGN_NEW_QUESTIONS_TO_PLAYER: self.start_new_run_for_player,
-                S.PRINT_QUESTIONS: self.generate_question_pdf,
-                S.DISPLAY_QUESTIONS_FOR_PLAYER: self.display_questions_for_player,
-                S.DELETE_QUESTIONS_FOR_PLAYER: self.delete_question,
-                S.EDIT_QUESTION_STATUS: self.edit_question_status,
-                S.BACK: self.back
-            },
-            S.MANAGE_SCORES: {
-                S.VIEW_SCORES: self.view_scores,
-                S.DELETE_CURRENT_QUESTIONS_SCORE_HISTORY: self.delete_current_run_score_history,
-                S.DELETE_ALL_SCORE_HISTORY: self.delete_all_score_history,
-                S.BACK: self.back
-            },
-            S.ANSWER_QUESTIONS: {
-                S.MULTIPLE_CHOICE: lambda: self.run_game_loop(is_ask_answer=False),
-                S.ASK_AND_ANSWER: lambda: self.run_game_loop(is_ask_answer=True),
-                S.BACK: self.back
-            },
-            S.EXIT: self.exit
-        }
-        
-        main_running = True
-        while main_running:
-            choice = get_user_str_choice_from_menu(S.MAIN_MENU, header=f"\n{S.MAIN_MENU}")
-            if choice == S.EXIT:
-                main_running = S.MAIN_MENU[choice]()
-            else:
-                running = True
-                while running:
-                    sub_choice = get_user_str_choice_from_menu(S.MAIN_MENU[choice], header=f"\n{choice}")
-                    running = S.MAIN_MENU[choice][sub_choice]()
-                    if choice != S.ANSWER_QUESTIONS:
-                        storage.save_session(self.existing_players, self.player_id_to_question_bank_lookup)
-    
-    def back(self):
-        """Returns False to break out of the current submenu loop."""
-        return False
-
-    def exit(self):
-        """Returns False to break out of the main menu loop."""
-        return False
+        return {p.name for p in self.existing_players if filter(p)}    
 
     # ======================
     # PLAYER MANAGEMENT
     # ======================
 
-    def add_player(self) -> None:
-        fresh_player = Player(birth_date=(date.today()), name="Newplayer")
-        existing_names = {p.name for p in self.existing_players}
-        fresh_player.edit_player_attributes(existing_names)
-        self.existing_players.append(fresh_player)
+    def add_player(self, player: Player) -> None:
+        self.existing_players.append(player)
 
-    def edit_player(self) -> None:
-        if not self.existing_players:
-            print("\nNo editable players.")
-            return
-        player = self.get_user_choice_of_existing_players()
-        existing_names = {p.name for p in self.existing_players if p != player}
-        player.edit_player_attributes(existing_names)
-
-    def remove_player(self) -> None:
-        if not self.existing_players:
-            print("\nNo removable players.")
-            return
-        player = self.get_user_choice_of_existing_players()
-        if self.player_id_to_question_bank_lookup[player.player_id] or player.total_questions_answered > 0:
-            warning_prompt = "\nWARNING: Deleting this player will cause all score history to be deleted. Would you like to proceed "
-            if not get_yes_no_response(warning_prompt):
-                print("\nPlayer not deleted. User manually aborted.")
-                return
+    def remove_player(self, player: Player) -> None:
         self.existing_players.remove(player)
-        print(f'\nPlayer "{player.name}" Removed')
-
-    def view_players(self) -> None:
-        print()
-        for index, player in enumerate(self.existing_players):
-            print(f"""=== No. {index + 1} ===""")
-            pass #TODO
+        self.player_id_to_question_bank_lookup.pop(player.player_id)
 
     # ======================
     # RUN MANAGEMENT

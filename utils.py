@@ -1,5 +1,8 @@
 """Common utility functions."""
 
+from calendar import monthrange
+from typing import Callable
+
 
 def get_valid_str_response(valid_choices: set[str], prompt: str, case=str.lower) -> str:
     '''
@@ -83,7 +86,7 @@ def construct_prompt_ending(keys: list[str]) -> str:
         main_text = main_text + " or"
     elif len(keys_with_brackets) > 2:
         main_text = main_text + ", or"
-    prompt_end = f"{main_text} {keys_with_brackets[-1]}?: "
+    prompt_end = f" {main_text} {keys_with_brackets[-1]}?: "
     return prompt_end
 
 
@@ -136,7 +139,7 @@ def get_yes_no_response(prompt: str) -> bool:
     Present the player with a prompt and return their response as a bool
 
     Args:
-        prompt: The prompt the user is presented with to evoke an input. Given prompt will be modified to end with "[Y] or [N]?: "
+        prompt: The prompt the user is presented with to evoke an input. Given prompt will be modified to end with " [Y] or [N]?: "
 
     Returns:
         True: if player selects yes ("y").
@@ -150,3 +153,36 @@ def get_yes_no_response(prompt: str) -> bool:
         return True
     else:
         return False
+    
+
+def days_in_month(year: int, month: int) -> int:
+    '''
+    Returns the number of days for a given month.
+
+    Args:
+        year: Target year - matters for leap years
+        month: Target month
+
+    Returns:
+        Value of the number of days
+    '''
+    return monthrange(year, month)[1]
+
+
+def format_info(arg_name: str, case: Callable[[str],str] | None=str.title) -> str:
+    '''
+    Returns a string whose underscores 
+    have been replaced with spaces.
+
+    Args:
+        arg_name: Name of argument whos name is being returned.
+        case: Format of returned string.
+    
+    Returns:
+        Value of newly formatted string
+    '''
+    if case:
+        formatted_str = case(arg_name.replace("_", " "))
+    else:
+        formatted_str = arg_name.replace("_", " ")
+    return formatted_str

@@ -14,10 +14,16 @@ from session import Session
 import json
 
 
-def save_session(existing_players: list[Player], player_id_to_qbank_lookup: dict[str, QuestionBank]) -> None:
+def save_session(existing_players: list[Player], player_id_to_qbank_lookup: dict[str, QuestionBank | None]) -> None:
     session_dict = {}
     for index, player in enumerate(existing_players):
-        session_dict[index] = {"player": player.model_dump(), "qbank": player_id_to_qbank_lookup[player.player_id].model_dump()}
+        session_dict[index] = {}
+        session_dict[index][S.PLAYER] = player.model_dump()
+        qbank = player_id_to_qbank_lookup[player.player_id]
+        if qbank:
+            session_dict[index][S.QBANK] = qbank.model_dump()
+        else:
+            session_dict[index][S.QBANK] = qbank
     with open(FILE_NAMES[S.PLAYER_FILE_NAME], "w") as f:
         json.dump(session_dict, f, indent=4)
 
@@ -28,10 +34,13 @@ def load_session() -> Session:
             session_dict: dict[str, dict] = json.load(f)
             session = Session()
             for k in session_dict:
-                player: Player = session_dict[k]["player"]
-                qbank: QuestionBank = session_dict[k]["qbank"]
+                player: Player = session_dict[k][S.PLAYER]
+                qbank: QuestionBank | None = session_dict[k][S.QBANK]
                 session.existing_players.append(Player.model_validate(player))
-                session.player_id_to_question_bank_lookup[player.player_id] = QuestionBank.model_validate(qbank)
+                if qbank:
+                    session.player_id_to_question_bank_lookup[player.player_id] = QuestionBank.model_validate(qbank)
+                else:
+                    session.player_id_to_question_bank_lookup[player.player_id] = qbank
     except FileNotFoundError:
         session = Session()
     
