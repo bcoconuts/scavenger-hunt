@@ -2,6 +2,8 @@
 
 from calendar import monthrange
 from typing import Callable
+from random import randint
+
 
 
 def get_valid_str_response(valid_choices: set[str], prompt: str, case=str.lower) -> str:
@@ -186,3 +188,11 @@ def format_info(arg_name: str, case: Callable[[str],str] | None=str.title) -> st
     else:
         formatted_str = arg_name.replace("_", " ")
     return formatted_str
+
+
+def generate_unique_id(existing_question_ids: set) -> str:
+    while True:
+        new_id = str(randint(10000000, 99999999))
+        if new_id not in existing_question_ids:
+            existing_question_ids.add(new_id)
+            return new_id

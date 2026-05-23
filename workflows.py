@@ -1,28 +1,57 @@
 """Workflows that orchastrate all of the domain and UI logic"""
 
 
-from constants import STRINGS as S
+from constants import (
+    STRINGS as S,
+    INTS,
+    QUESTION_STATUSES
+)
 from session import Session
-from models import Player
 import storage
+import cli
 from typing import Callable
 from types import ModuleType
+from xai import generate_questions
+from pdfgen import generate_pdf
+
+# ======================
+# CUSTOM EXCEPTIONS
+# ======================
+
+class NoSelection(Exception):
+    """Raised when there's nothing for the user to pick."""
+
 
 # ======================
 # USER CHOICES & MENUS
 # ======================
 
 
-def _get_user_choice_of_existing_players(session: Session, ui: ModuleType, filter: Callable[[Player], bool] | None=None) -> Player:
+def _get_user_choice_of_existing_players(session: Session, ui: ModuleType, filter: Callable | None=None) -> Player:
     player_dict = session.playername_player_dict(filter=filter)
-    player_name = ui.get_user_str_choice_from_menu(
-        player_dict,
-        header="\nPLAYERS",
-        prompt="Which player would you like to pick?"
-    )
-    player = player_dict[player_name]
-    return player
-        
+    if player_dict:
+        player_name = ui.get_user_str_choice_from_menu(
+            player_dict,
+            header="\nPLAYERS",
+            prompt="Which player would you like to pick?"
+        )
+        player = player_dict[player_name]
+        return player
+    ui.display_msg("No available players to choose from")
+    raise NoSelection
+
+
+def _check_for_players(session: Session, ui: ModuleType, filter: Callable | None=None) -> bool:
+    empty_msg = "None exist to view"
+    if filter is None:
+        if not any([p for p in session.existing_players]):
+            ui.display_msg(empty_msg)
+    elif not any([p for p in session.existing_players if filter(p)]):
+        ui.display_msg(empty_msg)
+    else:
+        return True
+    return False
+    
 
 def route_menu_actions(session: Session, ui: ModuleType) -> None:
     main_menu = {
@@ -34,17 +63,16 @@ def route_menu_actions(session: Session, ui: ModuleType) -> None:
             S.BACK: back
         },
         S.MANAGE_QUESTIONS: {
-            # S.ASSIGN_NEW_QUESTIONS_TO_PLAYER: start_new_run_for_player,
-            # S.PRINT_QUESTIONS: generate_question_pdf,
-            # S.DISPLAY_QUESTIONS_FOR_PLAYER: display_questions_for_player,
-            # S.DELETE_QUESTIONS_FOR_PLAYER: delete_question,
-            # S.EDIT_QUESTION_STATUS: edit_question_status,
+            S.ASSIGN_NEW_QUESTIONS_TO_PLAYER: lambda: start_new_run_for_player(session, ui),
+            S.PRINT_QUESTIONS: lambda: generate_question_pdf(session, ui),
+            S.DISPLAY_QUESTIONS_FOR_PLAYER: lambda: display_questions_for_player(session, ui),
+            S.DELETE_QUESTIONS_FOR_PLAYER: lambda: delete_question(session, ui),
+            S.EDIT_QUESTION_STATUS: lambda: edit_question_status(session, ui),
             S.BACK: back
         },
         S.MANAGE_SCORES: {
-            # S.VIEW_SCORES: view_scores,
-            # S.DELETE_CURRENT_QUESTIONS_SCORE_HISTORY: delete_current_run_score_history,
-            # S.DELETE_ALL_SCORE_HISTORY: delete_all_score_history,
+            S.VIEW_SCORES: lambda: view_scores(session, ui),
+            S.DELETE_SCORE_HISTORY: lambda: delete_score_history(session, ui),
             S.BACK: back
         },
         S.ANSWER_QUESTIONS: {
@@ -64,7 +92,10 @@ def route_menu_actions(session: Session, ui: ModuleType) -> None:
             running = True
             while running:
                 sub_choice = ui.get_user_str_choice_from_menu(main_menu[choice], header=f"\n{choice}")
-                running = main_menu[choice][sub_choice]()
+                try:
+                    running = main_menu[choice][sub_choice]()
+                except (NoSelection, cli.ManualAbort):
+                    running = True
                 if choice != S.ANSWER_QUESTIONS:
                     storage.save_session(session.existing_players, session.player_id_to_question_bank_lookup)
 
@@ -90,9 +121,6 @@ def edit_player(session: Session, ui: ModuleType) -> bool:
     Returns True to remain in the submenu.
     """
     player = _get_user_choice_of_existing_players(session, ui)
-    if not player:
-        ui.display_msg("No available players to choose from")
-        return True
     existing_names = session.player_name_set()
     existing_names.remove(player.name)
     new_name = ui.get_player_name(existing_names)
@@ -123,27 +151,150 @@ def remove_player(session: Session, ui: ModuleType) -> bool:
     Returns True to remain in the submenu.
     """
     player = _get_user_choice_of_existing_players(session, ui)
-    if not player:
-        ui.display_msg("No available players to choose from")
-        return True
     if session.has_qbank(player) or player.total_questions_answered > 0:
         warning_prompt = "Deleting this player will cause all score history to be deleted."
-        if not ui.warn_user(warning_prompt):
-            ui.display_msg("Player removal manually aborted. Player still exists.")
-            return True
+        ui.warn_user(warning_prompt)
     session.remove_player(player)
     ui.display_msg(f'\nPlayer "{player.name}" Removed')
     return True
 
 
-def view_players(session: Session, ui: ModuleType) -> None:
-    for index, player in enumerate(session.existing_players):
+def view_players(session: Session, ui: ModuleType) -> bool:
+    if _check_for_players(session, ui):
+        for index, player in enumerate(session.existing_players):
+            ui.display_attributes_for_object(
+                header="PLAYER",
+                seq_number=index + 1,
+                name=player.name,
+                age=player.years_old, 
+                questions_assigned=session.has_qbank(player)
+            )
+    return True
+
+
+# ======================
+# QUESTION MANAGEMENT
+# ======================
+
+
+def start_new_run_for_player(session: Session, ui: ModuleType) -> bool:
+    player = _get_user_choice_of_existing_players(session, ui)
+    if session.has_qbank(player):
+        warning_msg = "Assigning new questions will delete any unanswered questions."
+        ui.warn_user(warning_msg)
+    cat = ui.get_user_str_input("What category should the questions be about?: ")
+    r_length = ui.get_user_int_input(INTS[S.MAX_QUESTIONS], f"How many questions should be generated (1-{INTS[S.MAX_QUESTIONS]})?: ")
+    existing_question_ids = session.all_existing_question_ids()
+    question_bank = generate_questions(session.client, player.age_bucket, cat, r_length, existing_question_ids)
+    session.process_new_qbank(player, question_bank)
+    return True
+
+
+def generate_question_pdf(session: Session, ui: ModuleType) -> bool:
+    player = _get_user_choice_of_existing_players(session, ui, filter=session.has_qbank)
+    question_bank = session.player_id_to_question_bank_lookup[player.player_id]
+    pdf = generate_pdf(player.name, question_bank.question_id_list(), question_bank.category)
+    return True
+
+
+def display_questions_for_player(session: Session, ui: ModuleType) -> bool:
+    player = _get_user_choice_of_existing_players(session, ui)
+    question_bank = session.player_id_to_question_bank_lookup[player.player_id]
+    for index, question in enumerate(question_bank.question_list):
         ui.display_attributes_for_object(
-            header="PLAYER",
+            header="QUESTION",
             seq_number=index + 1,
-            name=player.name,
-            age=player.years_old, 
-            questions_assigned=session.has_qbank(player)
+            question=question.question,
+            answer=question.answer, 
+            fake_answers=question.fake_answers,
+            status=question.status
         )
+    return True
 
 
+def delete_question(session: Session, ui: ModuleType) -> bool:
+    player = _get_user_choice_of_existing_players(session, ui, filter=session.has_qbank)
+    question_bank = session.player_id_to_question_bank_lookup[player.player_id]
+    question_map = question_bank.question_content_map()
+    question_content = ui.get_user_str_choice_from_menu(question_map, prompt="Which question would you like to select?: ")
+    question_bank.remove_question(question_map[question_content])
+    ui.display_msg(f'\nQuestion removed.')
+    return True
+
+
+def edit_question_status(session: Session, ui: ModuleType) -> bool:
+    player = _get_user_choice_of_existing_players(session, ui, filter=session.has_qbank)
+    question_bank = session.player_id_to_question_bank_lookup[player.player_id]
+    question_map = question_bank.question_content_map()
+    question_content = ui.get_user_str_choice_from_menu(question_map, prompt="Which question ststus would you like to edit?: ")
+    question = question_map[question_content]
+    new_status = ui.get_user_str_choice_from_menu(QUESTION_STATUSES, numbered=True, prompt="Which status would you like to select?: ")
+    question.status = new_status
+
+
+# ======================
+# SCORE MANAGEMENT
+# ======================
+
+def view_scores(session: Session, ui: ModuleType) -> bool:
+    player = _get_user_choice_of_existing_players(session, ui)
+    if session.has_qbank(player):
+        qbank = session.player_id_to_question_bank_lookup[player.player_id]
+        total, correct, attempted = qbank.score()
+        ui.display_attributes_for_object(
+            "CURRENT QUESTION SET",
+            questions_assigned=total,
+            questions_attempted=attempted,
+            question_answered_correctly=correct
+        )
+    cli.display_attributes_for_object(
+        "ALL TIME SCORES",
+        total_question_attempted=player.total_questions_answered,
+        total_question_answered_correctly=player.total_questions_correctly_answered
+    )
+    return True
+
+
+def delete_score_history(session: Session, ui: ModuleType) -> None:
+    player = _get_user_choice_of_existing_players(session, ui)
+    if player.total_questions_answered > 0:
+        warning_msg = f"Deleting score history will delete score history for all questions ever assigned to {player.name}"
+        ui.warn_user(warning_msg)
+    player.total_questions_answered = 0
+    player.total_questions_correctly_answered = 0
+
+
+# ======================
+# GAME LOGIC
+# ======================
+
+def play_game(session: Session, ui: ModuleType, is_ask_answer: bool) -> None:
+    question_dict = session.all_question_id_to_question_dict()
+    player_dict = session.all_question_id_to_player_dict()
+
+    running = True
+    while running:
+        if not question_dict:
+            ui.display_msg("\nNo available questions")
+            break
+        scanned_id = ui.get_scanned_id() #will raise ManualAbort if user selects to exit game
+        if scanned_id in question_dict:
+            question = question_dict[scanned_id]
+            question_content = question.question
+            answer = question.answer
+            if is_ask_answer:
+                is_correct = ui.prompt_ask_answer(question_content, answer)
+            else:
+                all_answers = question.all_choices_shuffled()
+                user_answer: str = ui.prompt_multiple_choice_answer(question_content, all_answers)
+                is_correct = question.check_answer(user_answer)
+            question.update_status(is_correct)
+            player = player_dict[scanned_id]
+            player.record_attempt(is_correct)
+            question_dict.pop(scanned_id)
+        else:
+            ui.display_msg(
+                "\n Question has either already been scanned, overwritten, or deleted."
+                "Please try different barcode."
+            )
+        storage.save_session(session.existing_players, session.player_id_to_question_bank_lookup)

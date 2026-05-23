@@ -1,19 +1,12 @@
 """The data models and their pure logic"""
 
+from constants import (
+    STRINGS as S,
+)
 from datetime import date
 from pydantic import BaseModel, Field, computed_field
 from uuid import uuid4
 import random
-
-UNANSWERED = "Unanswered"
-CORRECTLY_ANSWERED = "Correctly Answered"
-INCORRECTLY_ANSWERED = "Incorrectly Answered"
-
-VALID_STATUSES = {
-    UNANSWERED,
-    CORRECTLY_ANSWERED,
-    INCORRECTLY_ANSWERED
-}
 
 
 class Question(BaseModel):
@@ -31,7 +24,7 @@ class Question(BaseModel):
         description="3 incorrect answers used as distractors in multiple choice"
     )
     status: str = Field(
-        default=UNANSWERED,
+        default=S.UNANSWERED,
         description="The status of the question"
     )
     question_id: str = ""
@@ -47,6 +40,13 @@ class Question(BaseModel):
         """Return True if user_input matches the correct answer
         """
         return user_input.strip().lower() == self.answer.strip().lower()
+    
+    def update_status(self, is_correct: bool) -> None:
+        if is_correct:
+            self.status = S.CORRECTLY_ANSWERED
+        else:
+            self.status = S.INCORRECTLY_ANSWERED
+
 
 
 class QuestionBank(BaseModel):
@@ -66,16 +66,43 @@ class QuestionBank(BaseModel):
         question = question_dict[unique_identifier]
         return question
     
-    def question_map(self) -> dict[str, Question]:
+    def question_id_map(self) -> dict[str, Question]:
         """Return a dict whose keys are question identification numbers, 
         and whose values are the Question object they are attached to.
         """
         question_map = {q.question_id: q for q in self.question_list}
         return question_map
+    
+    def question_content_map(self) -> dict[str, Question]:
+        """Return a dict whose keys are question contnet, 
+        and whose values are the Question object they are attached to.
+        """
+        question_map = {q.question: q for q in self.question_list}
+        return question_map
 
     def question_id_list(self) -> list[str]:
         question_id_list = [q.question_id for q in self.question_list]
         return question_id_list
+    
+    def remove_question(self, question: Question) -> None:
+        self.question_list.remove(question)
+
+    def score(self) -> tuple[int, int, int]:
+        """Return a tuple whose contents are 
+        (total questions attempted. total answered correctly) 
+        for the question list associated with this question bank.        
+        """
+        correct = 0
+        attempted = 0
+        for q in self.question_list:
+            if q.status == S.CORRECTLY_ANSWERED:
+                correct += 1
+                attempted += 1
+            elif q.status == S.INCORRECTLY_ANSWERED:
+                attempted += 1
+        return len(self.question_list), correct, attempted
+
+
 
 
 class Player(BaseModel):

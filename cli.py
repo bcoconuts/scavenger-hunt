@@ -3,7 +3,8 @@
 
 from constants import (
     STRINGS as S,
-    RANGES
+    RANGES,
+    YES_NO_DICT
 )
 from datetime import date
 from utils import (
@@ -17,12 +18,26 @@ from utils import (
     format_info
 )
 
+class ManualAbort(Exception):
+    """Raised when the user stops based on a warning"""
+
 def greet_user() -> None:
     print("Hello! Welcome to The Inquisitor!. Here's how the game works.....")
 
 
 def display_msg(msg: str) -> None:
     print(msg)
+
+
+def get_user_str_input(prompt: str) -> str:
+    response = input(prompt).strip()
+    return response
+
+
+def get_user_int_input(max_choice: int, prompt: str, min_choice: int=1) -> int:
+    valid_choices = {num for num in range(min_choice, max_choice + 1)}
+    response = get_valid_int_response(valid_choices, prompt)
+    return response
 
 
 def warn_user(warning_msg: str) -> bool:
@@ -46,7 +61,11 @@ def warn_user(warning_msg: str) -> bool:
         "=" * msg_length,
         sep="\n"
     )
-    return get_yes_no_response("Would you like to proceed")
+    if get_yes_no_response("Would you like to proceed"):
+        return True
+    else:
+        display_msg("Operation Aborted.")
+        raise ManualAbort
 
 
 def get_user_str_choice_from_menu(target_dict: dict, numbered: bool=False, header="\nOPTIONS", prompt="What would you like to do?: ") -> str:
@@ -114,7 +133,7 @@ def _format_presented_info(**kwargs: str | int | bool) -> tuple[list[tuple[str, 
     
 
 
-def display_attributes_for_object(header: str, seq_number: int, **kwargs: str | int | bool) -> None:
+def display_attributes_for_object(header: str, seq_number: int | None=None, **kwargs: str | int | bool) -> None:
     """Prints a formatted block of information to the screen 
     for a given header and any number of given keyword args. 
 
@@ -130,14 +149,48 @@ def display_attributes_for_object(header: str, seq_number: int, **kwargs: str | 
     header_length = len(header)
     full_str_list, max_front_str_length = _format_presented_info(**kwargs)
     for (f, b) in full_str_list:
-        l = len(f + b)
-        if l > header_length:
-            header_length = l
-
-    equal_int = (header_length - len(header) - 2)//2 # subrtact two for extra spaces and index number
-    if (header_length - len(f" {header} "))%2 == 0:
-        print(f"{"=" * equal_int} {header.capitalize()} {seq_number} {"=" * equal_int}")
+        h_length = len(f"{" " * (max_front_str_length - len(f))}{f}: {b}")
+        if h_length > header_length:
+            header_length = h_length
+    
+    header = " " + header.capitalize() # add 2 for spacing around header
+    if not seq_number:
+        object_num_holder = " "
+        equal_int = (header_length - len(header))//2
+        if (header_length - len(header))%2 == 0:
+            print(f"{"=" * equal_int}{header}{object_num_holder}{"=" * (equal_int - 1)}")
+        else:
+            print(f"{"=" * equal_int}{header}{object_num_holder}{"=" * equal_int}")
     else:
-        print(f"{"=" * equal_int} {header.capitalize()}: {seq_number} {"=" * equal_int}")
+        object_num_holder = ": " + str(seq_number) + " "
+        equal_int = (header_length - len(header) - 4)//2
+        if (header_length - len(header))%2 == 0:
+            print(f"{"=" * equal_int}{header}{object_num_holder}{"=" * (equal_int)}")
+        else:
+            print(f"{"=" * equal_int}{header}{object_num_holder}{"=" * (equal_int + 1)}")
+
     for f, b in full_str_list:
         print(f"{" " * (max_front_str_length - len(f))}{f}: {b}")
+
+
+def get_scanned_id() -> str:
+    scanned_id = input("\nPlease Scan Barcode (Enter 'F' to quit): ").strip()
+    if scanned_id.upper() == "F":
+        raise ManualAbort
+    return scanned_id
+
+
+def prompt_ask_answer(question_content: str, answer: str) -> bool:
+    prompt = "Was the question answered correctly?: "
+    choice = get_user_str_choice_from_menu(YES_NO_DICT, numbered=True, header=f"\n{question_content} [Answer: {answer}]", prompt=prompt)
+    if choice == S.YES:
+        return True
+    else:
+        return False
+    
+
+def prompt_multiple_choice_answer(question_content: str, all_answers: list[str]) -> str:
+    answer_dict = {index + 1: a for index, a in enumerate(all_answers)}
+    prompt = f"What is your answer (1-{len(all_answers)}?: "
+    answer = get_user_str_choice_from_menu(answer_dict, numbered=True, header=f"\n{question_content}", prompt=prompt)
+    return answer

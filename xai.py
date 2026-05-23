@@ -4,29 +4,24 @@ and assign unique identifiers to each question object generated.
 """
 
 from constants import DEBUG
-from models import (
-    QuestionBank,
-    Player
-)
-from random import randint
+from models import QuestionBank
+from utils import generate_unique_id
 from xai_sdk import Client
 from xai_sdk.chat import user
 
 
 def generate_questions(
-        client: Client, player: Player,
+        client: Client, age_bucket: str,
         category: str, run_length: int,
         existing_question_ids: set[str]
     ) -> QuestionBank:
 
     chat = client.chat.create(model="grok-latest")
 
-    chat.append(user(f"""\
-Generate {run_length} trivia questions.
-
-Questions aimed at {player.age_bucket} 
-
-Category for questions: {category}."""
+    chat.append(user(
+            f"Generate {run_length} trivia questions.\n"
+            f"Questions aimed at {age_bucket}\n"
+            f"Category for questions: {category}."
         )
     )
 
@@ -35,18 +30,10 @@ Category for questions: {category}."""
     try:
         response, question_bank = chat.parse(QuestionBank)
         for q in question_bank.question_list:
-            q.question_id = _generate_id(existing_question_ids)
+            q.question_id = generate_unique_id(existing_question_ids)
     except Exception as e:
         print("Something went wrong with question generation. Please try again")
         if DEBUG: print(e)
         question_bank = QuestionBank(category="General")
 
     return question_bank
-
-
-def _generate_id(existing_question_ids: set) -> str:
-    while True:
-        new_id = str(randint(10000000, 99999999))
-        if new_id not in existing_question_ids:
-            existing_question_ids.add(new_id)
-            return new_id
