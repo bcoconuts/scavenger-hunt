@@ -76,8 +76,8 @@ def route_menu_actions(session: Session, ui: ModuleType) -> None:
             S.BACK: back
         },
         S.ANSWER_QUESTIONS: {
-            # S.MULTIPLE_CHOICE: lambda: run_game_loop(is_ask_answer=False),
-            # S.ASK_AND_ANSWER: lambda: run_game_loop(is_ask_answer=True),
+            S.MULTIPLE_CHOICE: lambda: play_game(session, ui, is_ask_answer=False),
+            S.ASK_AND_ANSWER: lambda: play_game(session, ui, is_ask_answer=True),
             S.BACK: back
         },
         S.EXIT: exit
