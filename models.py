@@ -82,7 +82,7 @@ class QuestionBank(BaseModel):
     
     def question_content_map(self) -> dict[str, Question]:
         """Return a dict whose keys are question contnet, 
-        and whose values are the Question object they are attached to.
+        and whose values are the question ids they are attached to.
         """
         question_map = {q.question: q for q in self.question_list}
         return question_map

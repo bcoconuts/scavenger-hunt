@@ -184,7 +184,7 @@ def start_new_run_for_player(session: Session, ui: ModuleType) -> bool:
 
 
 def generate_question_pdf(session: Session, ui: ModuleType) -> bool:
-    player = _get_user_choice_of_existing_players(session, ui)
+    player = _get_user_choice_of_existing_players(session, ui, filter=session.has_qbank)
     question_bank = session.get_qbank(player)
     generate_pdf(player.name, question_bank.question_id_list(), question_bank.category)
     return True
@@ -277,7 +277,7 @@ def _evaluate_answer(question: Question, ui: ModuleType, is_ask_answer: bool) ->
     return is_correct
 
 
-def play_game(session: Session, ui: ModuleType, is_ask_answer: bool) -> None:
+def play_game(session: Session, ui: ModuleType, is_ask_answer: bool) -> bool:
     question_dict = session.all_question_id_to_question_dict()
     player_dict = session.all_question_id_to_player_dict()
 
@@ -299,3 +299,4 @@ def play_game(session: Session, ui: ModuleType, is_ask_answer: bool) -> None:
                 "Please try different barcode."
             )
         storage.save_session(session.existing_players, session.player_id_to_question_bank_lookup)
+    return True
