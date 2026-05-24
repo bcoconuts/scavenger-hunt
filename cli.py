@@ -193,6 +193,6 @@ def prompt_ask_answer(question_content: str, answer: str) -> bool:
 
 def prompt_multiple_choice_answer(question_content: str, all_answers: list[str]) -> str:
     answer_dict = {index + 1: a for index, a in enumerate(all_answers)}
-    prompt = f"What is your answer (1-{len(all_answers)}?: "
+    prompt = f"What is your answer (1-{len(all_answers)})?: "
     answer = get_user_str_choice_from_menu(answer_dict, numbered=True, header=f"\n{question_content}", prompt=prompt)
     return answer

@@ -78,11 +78,11 @@ class Session:
                 question_id_to_player_dict[q_id] = p
         return question_id_to_player_dict
     
-    def all_question_id_to_question_dict(self) -> dict[str, Question]:
+    def eligible_question_id_to_question_dict(self) -> dict[str, Question]:
         question_id_to_question_dict = dict()
         qbanks = [self.get_qbank(p) for p in self.existing_players if self.has_qbank(p)]
         for qbank in qbanks:
-            qbank_id_dict = qbank.question_id_map()
+            qbank_id_dict = qbank.eligible_question_id_map()
             question_id_to_question_dict.update(qbank_id_dict)
         return question_id_to_question_dict
 

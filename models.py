@@ -73,11 +73,11 @@ class QuestionBank(BaseModel):
         question = question_dict[question_content]
         return question
     
-    def question_id_map(self) -> dict[str, Question]:
+    def eligible_question_id_map(self) -> dict[str, Question]:
         """Return a dict whose keys are question identification numbers, 
         and whose values are the Question object they are attached to.
         """
-        question_map = {q.question_id: q for q in self.question_list}
+        question_map = {q.question_id: q for q in self.question_list if q.status == S.UNANSWERED}
         return question_map
     
     def question_content_map(self) -> dict[str, Question]:
@@ -226,7 +226,3 @@ class Player(BaseModel):
             self.total_questions_correctly_answered += 1
         else:
             return # in case someone swaps from incorrect to incorrect or correct to correct
-
-
-        
-

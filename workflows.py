@@ -266,9 +266,8 @@ def delete_score_history(session: Session, ui: ModuleType) -> bool:
 # GAME LOGIC
 # ======================
 
-def _evaluate_answer(question: Question, ui: ModuleType, is_ask_answer: bool) -> bool:
+def _evaluate_answer(question: Question, answer: str, ui: ModuleType, is_ask_answer: bool) -> bool:
     question_content = question.question
-    answer = question.answer
     if is_ask_answer:
         is_correct = ui.prompt_ask_answer(question_content, answer)
     else:
@@ -280,7 +279,7 @@ def _evaluate_answer(question: Question, ui: ModuleType, is_ask_answer: bool) ->
 
 
 def play_game(session: Session, ui: ModuleType, is_ask_answer: bool) -> bool:
-    question_dict = session.all_question_id_to_question_dict()
+    question_dict = session.eligible_question_id_to_question_dict()
     player_dict = session.all_question_id_to_player_dict()
 
     running = True
@@ -291,13 +290,18 @@ def play_game(session: Session, ui: ModuleType, is_ask_answer: bool) -> bool:
         scanned_id = ui.get_scanned_id() #will raise ManualAbort if user selects to exit game
         if scanned_id in question_dict:
             question = question_dict[scanned_id]
-            is_correct = _evaluate_answer(question, ui, is_ask_answer)
+            answer = question.answer
+            is_correct = _evaluate_answer(question, answer, ui, is_ask_answer)
+            if is_correct:
+                ui.display_msg("Correct!!!")
+            else:
+                ui.display_msg(f"Incorrect.\nCorrect answer is: {answer}")
             player = player_dict[scanned_id]
             player.record_attempt(is_correct)
             question_dict.pop(scanned_id)
         else:
             ui.display_msg(
-                "\n Question has either already been scanned, overwritten, or deleted."
+                "\n Question has either already been scanned, overwritten, or deleted. "
                 "Please try different barcode."
             )
         storage.save_session(session.existing_players, session.player_id_to_question_bank_lookup)
