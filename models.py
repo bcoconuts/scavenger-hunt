@@ -203,3 +203,30 @@ class Player(BaseModel):
         self.total_questions_answered += 1
         if is_correct:
             self.total_questions_correctly_answered += 1
+    
+    def adjust_attempt(self, old_status: str, new_status: str) -> None:
+        if old_status == S.UNANSWERED:
+            self._add_attempt(new_status)
+        elif old_status != S.UNANSWERED:
+            self._delete_attempt(old_status, new_status)
+    
+    def _add_attempt(self, new_status: str) -> None:
+        if new_status == S.CORRECTLY_ANSWERED:
+            self.total_questions_answered += 1
+            self.total_questions_correctly_answered += 1
+        elif new_status == S.INCORRECTLY_ANSWERED:
+            self.total_questions_answered += 1
+        else:
+            return # in case someone changed from unanswered to unanswered status
+    
+    def _delete_attempt(self, old_status: str, new_status: str) -> None:
+        if old_status == S.CORRECTLY_ANSWERED and new_status != S.CORRECTLY_ANSWERED:
+            self.total_questions_correctly_answered -= 1
+        elif old_status == S.INCORRECTLY_ANSWERED and new_status == S.CORRECTLY_ANSWERED:
+            self.total_questions_correctly_answered += 1
+        else:
+            return # in case someone swaps from incorrect to incorrect or correct to correct
+
+
+        
+

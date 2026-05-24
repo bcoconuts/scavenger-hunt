@@ -223,7 +223,9 @@ def edit_question_status(session: Session, ui: ModuleType) -> bool:
     question_content = ui.get_user_str_choice_from_menu(question_map, prompt="Which question ststus would you like to edit?: ")
     new_status = ui.get_user_str_choice_from_menu(QUESTION_STATUSES, numbered=True, prompt="Which status would you like to select?: ")
     question = question_bank.retrieve_question_by_content(question_content)
+    old_status = question.status
     question.status = new_status
+    player.adjust_attempt(old_status, new_status)
     return True
 
 
