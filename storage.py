@@ -18,10 +18,10 @@ def save_session(existing_players: list[Player], player_id_to_qbank_lookup: dict
     session_dict = {}
     for index, player in enumerate(existing_players):
         session_dict[index] = {}
-        session_dict[index][S.PLAYER] = player.model_dump()
-        qbank = player_id_to_qbank_lookup[player.player_id]
+        session_dict[index][S.PLAYER] = player.model_dump(mode="json")
+        qbank = player_id_to_qbank_lookup.get(player.player_id)
         if qbank:
-            session_dict[index][S.QBANK] = qbank.model_dump()
+            session_dict[index][S.QBANK] = qbank.model_dump(mode="json")
         else:
             session_dict[index][S.QBANK] = qbank
     with open(FILE_NAMES[S.PLAYER_FILE_NAME], "w") as f:
@@ -34,9 +34,9 @@ def load_session() -> Session:
             session_dict: dict[str, dict] = json.load(f)
             session = Session()
             for k in session_dict:
-                player: Player = session_dict[k][S.PLAYER]
+                player: Player = Player.model_validate(session_dict[k][S.PLAYER])
                 qbank: QuestionBank | None = session_dict[k][S.QBANK]
-                session.existing_players.append(Player.model_validate(player))
+                session.existing_players.append(player)
                 if qbank:
                     session.player_id_to_question_bank_lookup[player.player_id] = QuestionBank.model_validate(qbank)
                 else:

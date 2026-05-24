@@ -1,9 +1,8 @@
 """Common utility functions."""
 
 from calendar import monthrange
-from typing import Callable
 from random import randint
-
+from typing import Callable
 
 
 def get_valid_str_response(valid_choices: set[str], prompt: str, case=str.lower) -> str:

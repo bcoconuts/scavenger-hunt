@@ -33,6 +33,13 @@ class Session:
     # DATA
     # ======================
 
+    def get_qbank(self, player: Player) -> QuestionBank:
+        qbank = self.player_id_to_question_bank_lookup.get(player.player_id)
+        if qbank is None:
+            raise KeyError(f"No questions assigned to {player.name}")
+        else:
+            return qbank
+        
     def has_qbank(self, player: Player) -> bool:
         """Predicate: does this player have questions assigned?"""
         return self.player_id_to_question_bank_lookup.get(player.player_id) is not None
@@ -55,7 +62,7 @@ class Session:
 
     def all_existing_question_ids(self) -> set[str]:
         ids = set()
-        qbanks = [self.player_id_to_question_bank_lookup[p.player_id] for p in self.existing_players if self.has_qbank(p)]
+        qbanks = [self.get_qbank(p) for p in self.existing_players if self.has_qbank(p)]
         for qbank in qbanks:
             question_ids = qbank.question_id_list()
             for q_id in question_ids:
@@ -64,9 +71,7 @@ class Session:
 
     def all_question_id_to_player_dict(self) -> dict[str, Player]:
         question_id_to_player_dict = dict()
-        players = [p for p in self.existing_players]
-        qbanks = [self.player_id_to_question_bank_lookup[p.player_id] for p in self.existing_players if self.has_qbank(p)]
-        player_qbank_list = list(zip(players, qbanks))
+        player_qbank_list = [(p, self.get_qbank(p)) for p in self.existing_players if self.has_qbank(p)]
         for p, qbank in player_qbank_list:
             question_ids = qbank.question_id_list()
             for q_id in question_ids:
@@ -75,12 +80,11 @@ class Session:
     
     def all_question_id_to_question_dict(self) -> dict[str, Question]:
         question_id_to_question_dict = dict()
-        qbanks = [self.player_id_to_question_bank_lookup[p.player_id] for p in self.existing_players if self.has_qbank(p)]
+        qbanks = [self.get_qbank(p) for p in self.existing_players if self.has_qbank(p)]
         for qbank in qbanks:
             qbank_id_dict = qbank.question_id_map()
             question_id_to_question_dict.update(qbank_id_dict)
         return question_id_to_question_dict
-
 
     # ======================
     # PLAYER MANAGEMENT
@@ -88,10 +92,11 @@ class Session:
 
     def add_player(self, player: Player) -> None:
         self.existing_players.append(player)
+        self.player_id_to_question_bank_lookup[player.player_id] = None
 
     def remove_player(self, player: Player) -> None:
         self.existing_players.remove(player)
-        self.player_id_to_question_bank_lookup.pop(player.player_id)
+        self.player_id_to_question_bank_lookup.pop(player.player_id, None)
 
     # ======================
     # QBANK MANAGEMENT

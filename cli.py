@@ -1,6 +1,5 @@
 """All functions that print to the CLI and inputs from user"""
 
-
 from constants import (
     STRINGS as S,
     RANGES,
@@ -8,29 +7,31 @@ from constants import (
 )
 from datetime import date
 from utils import (
+    days_in_month,
     display_options_from_dict,
     display_options_from_numbered_dict,
+    format_info,
     get_key_int_choice_from_dict,
     get_unique_alpha_response,
     get_valid_int_response,
-    days_in_month,
-    get_yes_no_response,
-    format_info
+    get_yes_no_response
 )
+
 
 class ManualAbort(Exception):
     """Raised when the user stops based on a warning"""
+
 
 def greet_user() -> None:
     print("Hello! Welcome to The Inquisitor!. Here's how the game works.....")
 
 
 def display_msg(msg: str) -> None:
-    print(msg)
+    print(f"\n{msg}")
 
 
 def get_user_str_input(prompt: str) -> str:
-    response = input(prompt).strip()
+    response = input(f"\n{prompt}").strip()
     return response
 
 
@@ -56,6 +57,7 @@ def warn_user(warning_msg: str) -> bool:
     total_warning = f"WARNING: {warning_msg}"
     msg_length = len(total_warning)
     print(
+        "\n",
         "=" * msg_length,
         total_warning,
         "=" * msg_length,
@@ -158,16 +160,16 @@ def display_attributes_for_object(header: str, seq_number: int | None=None, **kw
         object_num_holder = " "
         equal_int = (header_length - len(header))//2
         if (header_length - len(header))%2 == 0:
-            print(f"{"=" * equal_int}{header}{object_num_holder}{"=" * (equal_int - 1)}")
+            print(f"\n{"=" * equal_int}{header}{object_num_holder}{"=" * (equal_int - 1)}")
         else:
-            print(f"{"=" * equal_int}{header}{object_num_holder}{"=" * equal_int}")
+            print(f"\n{"=" * equal_int}{header}{object_num_holder}{"=" * equal_int}")
     else:
         object_num_holder = ": " + str(seq_number) + " "
         equal_int = (header_length - len(header) - 4)//2
         if (header_length - len(header))%2 == 0:
-            print(f"{"=" * equal_int}{header}{object_num_holder}{"=" * (equal_int)}")
+            print(f"\n{"=" * equal_int}{header}{object_num_holder}{"=" * (equal_int)}")
         else:
-            print(f"{"=" * equal_int}{header}{object_num_holder}{"=" * (equal_int + 1)}")
+            print(f"\n{"=" * equal_int}{header}{object_num_holder}{"=" * (equal_int + 1)}")
 
     for f, b in full_str_list:
         print(f"{" " * (max_front_str_length - len(f))}{f}: {b}")

@@ -59,11 +59,18 @@ class QuestionBank(BaseModel):
     )
     category: str = Field(description="The category of the list of questions")
     
-    def retrieve_question(self, unique_identifier: str) -> Question:
+    def retrieve_question_by_id(self, unique_identifier: str) -> Question:
         """Return a question for a given question identifier
         """
         question_dict = {q.question_id: q for q in self.question_list}
         question = question_dict[unique_identifier]
+        return question
+    
+    def retrieve_question_by_content(self, question_content: str) -> Question:
+        """Return a question for a given question identifier
+        """
+        question_dict = {q.question: q for q in self.question_list}
+        question = question_dict[question_content]
         return question
     
     def question_id_map(self) -> dict[str, Question]:

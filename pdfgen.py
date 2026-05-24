@@ -7,22 +7,28 @@ from barcode import Code128
 from barcode.writer import ImageWriter
 from constants import (
     STRINGS as S,
-    PDF_GENERATION as PDF
+    PDF_GENERATION as PDF,
+    FILE_NAMES
 )
 from datetime import date
 from fpdf import FPDF
 from io import BytesIO
 from PIL import Image
+import os
 
 
-def generate_pdf(player_name: str, question_id_list: list[str], category: str) -> FPDF:
+def generate_pdf(player_name: str, question_id_list: list[str], category: str, filepath: str | None=None) -> str:
     pdf = FPDF(unit=PDF[S.UNIT], format=PDF[S.PAGE_FORMAT])
     pdf.set_margin(PDF[S.PAGE_MARGIN])
     pdf.add_page()
     _add_barcodes(pdf, player_name, question_id_list, category)
     _draw_grid(pdf)
-    
-    return pdf
+    if os.path.isdir(str(filepath)):
+        filepath = f"{filepath}{player_name}{FILE_NAMES[S.PDF_FILE_NAME]}"
+    else:
+        filepath = f"{player_name}{FILE_NAMES[S.PDF_FILE_NAME]}"
+    pdf.output(filepath)
+    return filepath
 
 
 def _add_barcodes(pdf: FPDF, player_name: str, question_id_list: list[str], category: str) -> None:
