@@ -80,11 +80,11 @@ class QuestionBank(BaseModel):
         question_map = {q.question_id: q for q in self.question_list if q.status == S.UNANSWERED}
         return question_map
     
-    def question_content_map(self) -> dict[str, Question]:
+    def question_content_to_id_map(self) -> dict[str, str]:
         """Return a dict whose keys are question contnet, 
         and whose values are the question ids they are attached to.
         """
-        question_map = {q.question: q for q in self.question_list}
+        question_map = {q.question: q.question_id for q in self.question_list}
         return question_map
 
     def question_id_list(self) -> list[str]:
@@ -220,7 +220,10 @@ class Player(BaseModel):
             return # in case someone changed from unanswered to unanswered status
     
     def _delete_attempt(self, old_status: str, new_status: str) -> None:
-        if old_status == S.CORRECTLY_ANSWERED and new_status != S.CORRECTLY_ANSWERED:
+        if old_status == S.CORRECTLY_ANSWERED and new_status == S.INCORRECTLY_ANSWERED:
+            self.total_questions_correctly_answered -= 1
+        elif old_status == S.CORRECTLY_ANSWERED and new_status == S.UNANSWERED:
+            self.total_questions_answered -= 1
             self.total_questions_correctly_answered -= 1
         elif old_status == S.INCORRECTLY_ANSWERED and new_status == S.CORRECTLY_ANSWERED:
             self.total_questions_correctly_answered += 1

@@ -208,9 +208,9 @@ def display_questions_for_player(session: Session, ui: ModuleType) -> bool:
 def delete_question(session: Session, ui: ModuleType) -> bool:
     player = _get_user_choice_of_existing_players(session, ui, filter=session.has_qbank)
     question_bank = session.get_qbank(player)
-    question_map = question_bank.question_content_map()
-    question_content = ui.get_user_str_choice_from_menu(question_map, prompt="Which question would you like to select?: ")
-    question = question_bank.retrieve_question_by_content(question_content)
+    question_map = question_bank.question_content_to_id_map()
+    question_id = ui.get_user_value_choice_from_key_menu(question_map, prompt="Which question would you like to select?: ")
+    question = question_bank.retrieve_question_by_id(question_id)
     question_bank.remove_question(question)
     ui.display_msg(f'Question removed.')
     return True
@@ -219,10 +219,10 @@ def delete_question(session: Session, ui: ModuleType) -> bool:
 def edit_question_status(session: Session, ui: ModuleType) -> bool:
     player = _get_user_choice_of_existing_players(session, ui, filter=session.has_qbank)
     question_bank = session.get_qbank(player)
-    question_map = question_bank.question_content_map()
-    question_content = ui.get_user_str_choice_from_menu(question_map, prompt="Which question ststus would you like to edit?: ")
+    question_map = question_bank.question_content_to_id_map()
+    question_id = ui.get_user_value_choice_from_key_menu(question_map, prompt="Which question ststus would you like to edit?: ")
     new_status = ui.get_user_str_choice_from_menu(QUESTION_STATUSES, numbered=True, prompt="Which status would you like to select?: ")
-    question = question_bank.retrieve_question_by_content(question_content)
+    question = question_bank.retrieve_question_by_id(question_id)
     old_status = question.status
     question.status = new_status
     player.adjust_attempt(old_status, new_status)
