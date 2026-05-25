@@ -1,4 +1,11 @@
-"""The data models and their pure logic"""
+"""Domain models for the scavenger hunt: Question, QuestionBank, and Player.
+
+These are the core data types the rest of the app is built around. They hold
+state and the rules tightly bound to that state (age calculation, answer
+checking, score adjustment) but perform no I/O — no printing, prompting, file
+access, or network calls. This module depends only on constants; everything
+else depends on it.
+"""
 
 from constants import (
     STRINGS as S,
@@ -30,7 +37,9 @@ class Question(BaseModel):
     question_id: str = ""
 
     def all_choices_shuffled(self) -> list[str]:
-        """Return all answer options (correct + fakes) in random order
+        """Return the correct answer plus fake answers in randomized order.
+
+        Shuffled so the correct answer's position varies between presentations.
         """
         choices = self.fake_answers + [self.answer]
         random.shuffle(choices)
@@ -42,6 +51,7 @@ class Question(BaseModel):
         return user_input.strip().lower() == self.answer.strip().lower()
     
     def update_status(self, is_correct: bool) -> None:
+        """Set status to CORRECTLY_ANSWERED or INCORRECTLY_ANSWERED per is_correct."""
         if is_correct:
             self.status = S.CORRECTLY_ANSWERED
         else:
@@ -60,37 +70,46 @@ class QuestionBank(BaseModel):
     category: str = Field(description="The category of the list of questions")
     
     def retrieve_question_by_id(self, unique_identifier: str) -> Question:
-        """Return a question for a given question identifier
-        """
+        """Return the Question with the given question_id. Raises KeyError if absent."""
         question_dict = {q.question_id: q for q in self.question_list}
         question = question_dict[unique_identifier]
         return question
     
     def eligible_question_id_map(self) -> dict[str, Question]:
-        """Return a dict whose keys are question identification numbers, 
-        and whose values are the Question object they are attached to.
+        """Return {question_id: Question} for UNANSWERED questions only.
+
+        Builds the pool of still-playable questions for a game session; answered
+        questions are excluded so they can't be scanned again.
         """
         question_map = {q.question_id: q for q in self.question_list if q.status == S.UNANSWERED}
         return question_map
     
     def question_content_to_id_map(self) -> dict[str, str]:
-        """Return a dict whose keys are question contnet, 
-        and whose values are the question ids they are attached to.
+        """Return {question_text: question_id}.
+
+        Lets the UI offer questions by their readable text while the caller
+        resolves the choice back to a unique id, since question text is not
+        guaranteed to be unique but ids are.
         """
         question_map = {q.question: q.question_id for q in self.question_list}
         return question_map
 
     def question_id_list(self) -> list[str]:
+        """Return a list of every question_id in the bank, in list order."""
         question_id_list = [q.question_id for q in self.question_list]
         return question_id_list
     
     def remove_question(self, question: Question) -> None:
+        """Remove the given question from the bank."""
         self.question_list.remove(question)
 
     def score(self) -> tuple[int, int, int]:
-        """Return a tuple whose contents are 
-        (total questions attempted. total answered correctly) 
-        for the question list associated with this question bank.        
+        """Return this bank's score as (total, correct, attempted).
+
+        total     - number of questions in the bank
+        correct   - questions whose status is CORRECTLY_ANSWERED
+        attempted - questions answered either correctly or incorrectly
+                    (i.e. excludes UNANSWERED)
         """
         correct = 0
         attempted = 0
@@ -106,6 +125,11 @@ class QuestionBank(BaseModel):
 
 
 class Player(BaseModel):
+    """A player and their lifetime score history.
+
+    Stores identity (id, name, birth_date) and all-time tallies. Age is
+    computed from birth_date rather than stored, so it never goes stale.
+    """
     player_id: str = Field(
         default_factory=lambda: str(uuid4()),
         description="Unique identifier of the player"
@@ -128,7 +152,7 @@ class Player(BaseModel):
     @computed_field
     @property
     def years_old(self) -> int:
-        "Calculate age of player in years and return it"
+        """Return the player's age in whole years, computed from birth_date."""
         today = date.today()
         age = today.year - self.birth_date.year
         if (today.month, today.day) < (self.birth_date.month, self.birth_date.day):
@@ -198,12 +222,24 @@ class Player(BaseModel):
             self.total_questions_correctly_answered += 1
     
     def adjust_attempt(self, old_status: str, new_status: str) -> None:
+        """Adjust all-time score counters when a question's status is edited by hand.
+
+        Treats a hand-edit as moving an attempt into or out of score history:
+        editing away from UNANSWERED adds an attempt, editing toward UNANSWERED
+        removes one, and switching between correct and incorrect adjusts only the
+        correct counter. Keeps total and correct counts consistent with the
+        question's new status.
+
+        Note: the caller must read the question's status BEFORE reassigning it,
+        then pass the old and new values here.
+        """
         if old_status == S.UNANSWERED:
             self._add_attempt(new_status)
         elif old_status != S.UNANSWERED:
             self._delete_attempt(old_status, new_status)
     
     def _add_attempt(self, new_status: str) -> None:
+        """Increment counters for a question moving from UNANSWERED to a graded status."""
         if new_status == S.CORRECTLY_ANSWERED:
             self.total_questions_answered += 1
             self.total_questions_correctly_answered += 1
@@ -213,6 +249,7 @@ class Player(BaseModel):
             return # in case someone changed from unanswered to unanswered status
     
     def _delete_attempt(self, old_status: str, new_status: str) -> None:
+        """Adjust counters for a question moving away from its previous graded status."""
         if old_status == S.CORRECTLY_ANSWERED and new_status == S.INCORRECTLY_ANSWERED:
             self.total_questions_correctly_answered -= 1
         elif old_status == S.CORRECTLY_ANSWERED and new_status == S.UNANSWERED:
