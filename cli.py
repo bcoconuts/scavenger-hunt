@@ -25,7 +25,10 @@ from utils import (
 # ======================
 
 class ManualAbort(Exception):
-    """Raised when the user stops based on a warning"""
+    """Raised to abort the current action: a declined warning, or 'F' to quit a game.
+
+    Caught by the menu loop, which treats it as 'cancel and stay in the menu'.
+    """
 
 
 # ======================
@@ -55,6 +58,11 @@ def _format_presented_info(**kwargs: str | int | bool) -> tuple[list[tuple[str, 
 
 
 def _construct_prompt_ending(keys: list[str]) -> str:
+    """Build a bracketed choice suffix from option keys, e.g. ' [Y] or [N]?: '.
+
+    Each key gets its first letter bracketed; keys are joined with commas and a
+    trailing 'or' so the result reads naturally at the end of a prompt.
+    """
     keys_with_brackets = [
         f"[{i[0].upper()}]{i[1:]}" if len(i) > 1 else f"[{i.upper()}]" for i in keys
     ]
@@ -72,6 +80,7 @@ def _construct_prompt_ending(keys: list[str]) -> str:
 # ======================
 
 def greet_user() -> None:
+    """Print the welcome banner shown once at program start."""
     print("Hello! Welcome to The Inquisitor!. Here's how the game works.....")
 
 
@@ -80,47 +89,36 @@ def greet_user() -> None:
 # ======================
 
 def display_msg(msg: str) -> None:
+    """Print a message to the user, preceded by a blank line for spacing."""
     print(f"\n{msg}")
 
 
 def display_options_from_numbered_dict(header: str, target_dict: dict[int, str]) -> None:
-    '''
-    Display options to user for a dict formatted {Option Number: Option Name}.
-
-    Args:
-        header: Header to be displayed prior to options list being displayed.
-        target_dict: Dict from which options will be derived.    
-    '''
+    """Print a header then each option from a {number: label} dict as 'number. label'."""
     print(header)
     for k, v in target_dict.items():
         print(f"    {k}. {v}")
 
 
 def display_options_from_dict(header: str, target_dict: dict) -> None:
-    '''
-    Display options to user for a dict formatted with options stored as keys.
-
-    Args:
-        header: Header to be displayed prior to options list being displayed.
-        target_dict: Dict from which options will be derived.    
-    '''
+    """Print a header then number each of the dict's keys for selection."""
     print(header)
     for index, key in enumerate(target_dict):
         print(f"    {index + 1}. {key}")
 
 
 def display_attributes_for_object(header: str, seq_number: int | None=None, **kwargs: str | int | bool) -> None:
-    """Prints a formatted block of information to the screen 
-    for a given header and any number of given keyword args. 
+    """Print a formatted, aligned block of label: value lines under a header.
 
-    Kwargs should be given in the following format to achieve the subsequent example
-    Kwargs:
-    (player_name="blanton", age=3)
+    Labels come from the keyword argument names (underscores become spaces,
+    title-cased) and are right-aligned on the colon. If seq_number is given it
+    appears in the header, for numbering items in a list.
 
-    Example format:
-    ====== HEADER ======
-    Player Name: Blanton
-            Age: 10
+    Example:
+        display_attributes_for_object("PLAYER", 1, player_name="Blanton", age=10)
+        ===== Player: 1 ====
+        Player Name: Blanton
+                Age: 10
     """
     header_length = len(header)
     full_str_list, max_front_str_length = _format_presented_info(**kwargs)
@@ -154,6 +152,10 @@ def display_attributes_for_object(header: str, seq_number: int | None=None, **kw
 # ======================
 
 def get_player_name(existing_names: set[str]) -> str:
+    """Prompt for a unique, alphabetic player name and return it title-cased.
+
+    Re-prompts until the name is alphabetic and not already in existing_names.
+    """
     prompt = "\nWhat should the player be called?: "
     name = get_unique_alpha_response(existing_names, prompt, str.title)
     return name
@@ -182,6 +184,11 @@ def get_birth_date(player_name: str) -> date:
 
 
 def get_scanned_id() -> str:
+    """Read one scanned barcode (or typed id) and return it.
+
+    The USB scanner acts as a keyboard, so this is a plain input(). Entering
+    'F' raises ManualAbort to quit the game loop.
+    """
     scanned_id = input("\nPlease Scan Barcode (Enter 'F' to quit): ").strip()
     if scanned_id.upper() == "F":
         raise ManualAbort
@@ -189,6 +196,10 @@ def get_scanned_id() -> str:
 
 
 def prompt_ask_answer(question_content: str, answer: str) -> bool:
+    """Show the question and its answer to a parent; return whether the child was right.
+
+    Used in ask-and-answer mode, where an adult judges the spoken answer.
+    """
     prompt = "Was the question answered correctly?: "
     choice = get_user_str_choice_from_menu(YES_NO_DICT, numbered=True, header=f"\n{question_content} [Answer: {answer}]", prompt=prompt)
     if choice == S.YES:
@@ -198,6 +209,7 @@ def prompt_ask_answer(question_content: str, answer: str) -> bool:
     
 
 def prompt_multiple_choice_answer(question_content: str, all_answers: list[str]) -> str:
+    """Show the question with numbered choices; return the selected answer text."""
     answer_dict = {index + 1: a for index, a in enumerate(all_answers)}
     prompt = f"What is your answer (1-{len(all_answers)})?: "
     answer = get_user_str_choice_from_menu(answer_dict, numbered=True, header=f"\n{question_content}", prompt=prompt)
@@ -205,6 +217,10 @@ def prompt_multiple_choice_answer(question_content: str, all_answers: list[str])
 
 
 def get_key_int_choice_from_dict(prompt: str, target_dict: dict) -> int:
+    """Prompt for an integer in 1..len(target_dict) and return it.
+
+    The valid range is derived from the dict's size, for picking a numbered option.
+    """
     dict_range = {i for i in range(1, len(target_dict) + 1)}
     choice = get_valid_int_response(dict_range, prompt)
 
@@ -216,17 +232,28 @@ def get_key_int_choice_from_dict(prompt: str, target_dict: dict) -> int:
 # ======================
 
 def get_user_str_input(prompt: str) -> str:
+    """Prompt the user and return their stripped text response."""
     response = input(f"\n{prompt}").strip()
     return response
 
 
 def get_user_int_input(max_choice: int, prompt: str, min_choice: int=1) -> int:
+    """Prompt for an integer within [min_choice, max_choice] and return it.
+
+    Re-prompts until the input is a valid integer in range.
+    """
     valid_choices = {num for num in range(min_choice, max_choice + 1)}
     response = get_valid_int_response(valid_choices, prompt)
     return response
 
 
 def get_user_str_choice_from_menu(target_dict: dict, numbered: bool=False, header="\nOPTIONS", prompt="What would you like to do?: ") -> str:
+    """Display a menu and return the chosen key as a string.
+
+    If numbered is True, target_dict is treated as {number: label} and the chosen
+    label is returned. Otherwise the dict's keys are listed and the chosen key is
+    returned. Re-prompts until a valid number is entered.
+    """
     if numbered:
         display_options_from_numbered_dict(header, target_dict)
         new_dict = target_dict
@@ -241,6 +268,11 @@ def get_user_str_choice_from_menu(target_dict: dict, numbered: bool=False, heade
 
 
 def get_user_value_choice_from_key_menu(target_dict: dict, header="\nOPTIONS", prompt="What would you like to do?: ") -> str:
+    """Display a menu of the dict's keys and return the chosen key's value.
+
+    Like get_user_str_choice_from_menu, but resolves the selection to the value
+    behind it. Used to show questions by text while returning the question_id.
+    """
     display_options_from_dict(header, target_dict)
     new_dict = {(index + 1): k for index, k in enumerate(target_dict)}
     int_choice = get_key_int_choice_from_dict(prompt, target_dict)
@@ -251,22 +283,22 @@ def get_user_value_choice_from_key_menu(target_dict: dict, header="\nOPTIONS", p
 
 
 def warn_user(warning_msg: str) -> bool:
-    """Present the player with a warning and return their response as a bool.
-    Warning will be formatted as follows:
+    """Display a boxed warning and require confirmation before continuing.
 
-    ======================
-    WARNING: {warning_msg}
-    ======================
-    Would you like to proceed [Y] or [N]?: 
+    Prints the warning framed in '=' lines, then asks the user to proceed.
+    Returns True if they confirm. If they decline, prints an abort notice and
+    raises ManualAbort, which the menu loop catches to cancel the action.
 
-    Returns
-    True
-    if player selects yes ("y"). False: if player selects no ("n").
+    Formatted as:
+        ======================
+        WARNING: {warning_msg}
+        ======================
+        Would you like to proceed [Y] or [N]?:
     """
     total_warning = f"WARNING: {warning_msg}"
     msg_length = len(total_warning)
     print(
-        "\n",
+        "",
         "=" * msg_length,
         total_warning,
         "=" * msg_length,
@@ -280,16 +312,11 @@ def warn_user(warning_msg: str) -> bool:
 
 
 def get_yes_no_response(prompt: str) -> bool:
-    '''
-    Present the player with a prompt and return their response as a bool
+    """Ask a yes/no question and return True for yes, False for no.
 
-    Args:
-        prompt: The prompt the user is presented with to evoke an input. Given prompt will be modified to end with " [Y] or [N]?: "
-
-    Returns:
-        True: if player selects yes ("y").
-        False: if player selects no ("n").
-    '''
+    The prompt is given a ' [Y] or [N]?: ' suffix and re-asked until the user
+    enters y or n.
+    """
     options = ["y", "n"]
     prompt_end = _construct_prompt_ending(options)
     full_prompt = prompt + prompt_end
@@ -301,20 +328,11 @@ def get_yes_no_response(prompt: str) -> bool:
 
 
 def get_valid_str_response(valid_choices: set[str], prompt: str, case=str.lower) -> str:
-    '''
-    Ensure a valid string is returned from the user's input.
+    """Prompt until the user's response (normalized by case) is in valid_choices.
 
-    Args:
-        valid_choices: A set of strings, of which the user must match their
-            input exactly with any in the set.
-        prompt: The prompt the user is presented with to evoke an input.
-        case: A string method used to normalize user input before comparison.
-            Defaults to str.lower. Pass str.upper or str.title to change
-            normalization behavior.
-
-    Returns:
-        Value of the users valid input.
-    '''
+    case is a string method applied before comparison (default str.lower); pass
+    str.upper or str.title to change normalization.
+    """
     while True:
         response = case(input(prompt).strip())
         if response not in valid_choices:
@@ -324,17 +342,10 @@ def get_valid_str_response(valid_choices: set[str], prompt: str, case=str.lower)
 
 
 def get_valid_int_response(valid_choices: set[int], prompt: str) -> int:
-    '''
-    Ensure a valid int is returned from the user's input.
+    """Prompt until the user enters an integer that is in valid_choices.
 
-    Args:
-        valid_choices: A set of ints, of which the user must match their
-            input exactly with any in the set.
-        prompt: The prompt the user is presented with to evoke an input.
-
-    Returns:
-        Value of the users valid input.
-    '''
+    Re-prompts on non-integer input or values outside the allowed set.
+    """
     while True:
         try:
             response = int(input(prompt).strip())
@@ -347,20 +358,10 @@ def get_valid_int_response(valid_choices: set[int], prompt: str) -> int:
 
 
 def get_unique_alpha_response(invalid_choices: set, prompt: str, case=str.lower) -> str:
-    '''
-    Ensure a unique alphabetical string is returned from the user's input.
+    """Prompt until the response is alphabetic and not already in invalid_choices.
 
-    Args:
-        invalid_choices: A set of strings, of which the user must not match their
-            input with any in the set.
-        prompt: The prompt the user is presented with to evoke an input.
-        case: A string method used to normalize user input before comparison.
-            Defaults to str.lower. Pass str.upper or str.title to change
-            normalization behavior.
-
-    Returns:
-        Value of the users unique input.
-    '''
+    case normalizes the input before the uniqueness check (default str.lower).
+    """
     unique_error_msg = "Already Taken."
     alpha_error_msg = "Must be alphabetical only. No numbers or special chars."
     while True:
