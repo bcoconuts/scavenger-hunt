@@ -66,13 +66,6 @@ class QuestionBank(BaseModel):
         question = question_dict[unique_identifier]
         return question
     
-    def retrieve_question_by_content(self, question_content: str) -> Question:
-        """Return a question for a given question identifier
-        """
-        question_dict = {q.question: q for q in self.question_list}
-        question = question_dict[question_content]
-        return question
-    
     def eligible_question_id_map(self) -> dict[str, Question]:
         """Return a dict whose keys are question identification numbers, 
         and whose values are the Question object they are attached to.

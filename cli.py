@@ -84,6 +84,16 @@ def get_user_str_choice_from_menu(target_dict: dict, numbered: bool=False, heade
     return str_choice
 
 
+def get_user_value_choice_from_key_menu(target_dict: dict, header="\nOPTIONS", prompt="What would you like to do?: ") -> str:
+    display_options_from_dict(header, target_dict)
+    new_dict = {(index + 1): k for index, k in enumerate(target_dict)}
+    int_choice = get_key_int_choice_from_dict(prompt, target_dict)
+    str_choice = new_dict[int_choice]
+    value_choice = target_dict[str_choice]
+    
+    return value_choice
+
+
 def get_player_name(existing_names: set[str]) -> str:
     prompt = "\nWhat should the player be called?: "
     name = get_unique_alpha_response(existing_names, prompt, str.title)
