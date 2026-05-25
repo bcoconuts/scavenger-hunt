@@ -161,7 +161,7 @@ def view_players(session: Session, ui: ModuleType) -> bool:
                 questions_assigned=session.has_qbank(player)
             )
     else:
-        ui.display_msg("No availiable players to view")
+        ui.display_msg("No available players to view")
     return True
 
 
