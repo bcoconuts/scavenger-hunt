@@ -11,6 +11,7 @@ def main():
         import cli as ui #TODO - change cli to gui once gui.py exists
     else:
         import cli as ui
+    ui.greet_user()
     session = storage.load_session()
     workflows.route_menu_actions(session, ui)
 
