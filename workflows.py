@@ -212,7 +212,11 @@ def start_new_run_for_player(session: Session, ui: ModuleType) -> bool:
     r_length = ui.get_user_int_input(INTS[S.MAX_QUESTIONS], f"How many questions should be generated (1-{INTS[S.MAX_QUESTIONS]})?: ")
     existing_question_ids = session.all_existing_question_ids()
     question_bank = generate_questions(session.client, player.age_bucket, cat, r_length, existing_question_ids)
-    session.process_new_qbank(player, question_bank)
+    if question_bank is not None:
+        session.process_new_qbank(player, question_bank)
+    else:
+        ui.display_msg("Something went wrong with question generation. Please try again")
+    
     return True
 
 

@@ -17,7 +17,7 @@ def generate_questions(
         client: Client, age_bucket: str,
         category: str, run_length: int,
         existing_question_ids: set[str]
-    ) -> QuestionBank:
+    ) -> QuestionBank | None:
     """Generate run_length trivia questions for an age bucket and category.
 
     Asks Grok to return a QuestionBank via structured output, then assigns each
@@ -42,8 +42,6 @@ def generate_questions(
             q.question_id = generate_unique_id(existing_question_ids)
             existing_question_ids.add(q.question_id)
     except Exception as e:
-        print("Something went wrong with question generation. Please try again")
         if DEBUG: print(e)
-        question_bank = QuestionBank(category="General")
-
+        question_bank = None
     return question_bank
