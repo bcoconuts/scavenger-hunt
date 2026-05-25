@@ -1,5 +1,9 @@
-"""
-Constants
+"""Project-wide constants: display strings, menu labels, numeric limits, and config.
+
+STRINGS holds every user-facing label and status value as a SimpleNamespace so
+they're referenced by name (S.ADD_PLAYER) rather than retyped, giving one place
+to change wording. The dicts below group runtime config (ranges, file names,
+PDF layout) keyed off those strings.
 """
 
 from datetime import date

@@ -6,7 +6,7 @@ import workflows
 
 
 def main():
-    
+    """Program entry point: pick the UI, load the session, run the menu loop."""
     if "--gui" in sys.argv:
         import cli as ui #TODO - change cli to gui once gui.py exists
     else:

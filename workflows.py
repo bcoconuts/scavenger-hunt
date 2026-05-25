@@ -1,5 +1,14 @@
-"""Workflows that orchastrate all of the domain and UI logic"""
+"""Workflows: the recipes that coordinate Session, the UI, and the other modules.
 
+Each workflow drives one user-facing task — it asks the UI for input, calls
+Session and the domain models to do the work, and reports results back through
+the UI. Workflows are the only layer that knows about both the UI and the
+domain at once; Session and the models stay ignorant of how the user interacts.
+
+Every menu action returns True to keep its submenu looping. Cancellation is
+signaled by exceptions (NoSelection here, ManualAbort from the UI), which the
+menu loop catches and treats as 'stay in the menu'.
+"""
 
 from constants import (
     STRINGS as S,
@@ -31,6 +40,12 @@ class NoSelection(Exception):
 
 
 def _get_user_choice_of_existing_players(session: Session, ui: ModuleType, filter: Callable | None=None) -> Player:
+    """Prompt the user to pick a player and return it.
+
+    Builds the selectable list from session (optionally filtered, e.g. only
+    players with a question bank). Raises NoSelection if no player qualifies,
+    which the menu loop catches to cancel the action.
+    """
     player_dict = session.playername_player_dict(filter=filter)
     if player_dict:
         player_name = ui.get_user_str_choice_from_menu(
@@ -45,6 +60,14 @@ def _get_user_choice_of_existing_players(session: Session, ui: ModuleType, filte
     
 
 def route_menu_actions(session: Session, ui: ModuleType) -> None:
+    """Run the main menu loop until the user exits.
+
+    Builds the menu-to-action mapping, then repeatedly shows the main menu and,
+    for the chosen submenu, dispatches actions until the user backs out.
+    Cancellation exceptions (NoSelection, ManualAbort) are caught so a cancelled
+    action just returns to the menu. State is saved after each action except
+    during gameplay, which saves itself per scan.
+    """
     main_menu = {
         S.MANAGE_PLAYERS: {
             S.ADD_PLAYER: lambda: add_player(session, ui),
@@ -92,12 +115,12 @@ def route_menu_actions(session: Session, ui: ModuleType) -> None:
 
 
 def back():
-    """Returns False to break out of the current submenu loop."""
+    """Menu action: return False to break out of the current submenu loop."""
     return False
 
 
 def exit():
-    """Returns False to break out of the main menu loop."""
+    """Menu action: return False to end the main menu loop and quit."""
     return False
 
 
@@ -107,9 +130,9 @@ def exit():
 
 
 def edit_player(session: Session, ui: ModuleType) -> bool:
-    """Walk the user through editing an existing player's name and birth date.
+    """Pick a player, then collect and apply a new name and birth date.
 
-    Returns True to remain in the submenu.
+    Mutates the chosen player in place. Returns True to stay in the submenu.
     """
     player = _get_user_choice_of_existing_players(session, ui)
     existing_names = session.player_name_set()
@@ -136,10 +159,10 @@ def add_player(session: Session, ui: ModuleType) -> bool:
 
 
 def remove_player(session: Session, ui: ModuleType) -> bool:
-    """Walk the user through deleting an existing player.
-    Guards against deleting players with existing questions and score hiostory.
+    """Pick a player and delete them from the session.
 
-    Returns True to remain in the submenu.
+    Warns first if the player has a question bank or score history (a declined
+    warning raises ManualAbort and cancels). Returns True to stay in the submenu.
     """
     player = _get_user_choice_of_existing_players(session, ui)
     if session.has_qbank(player) or player.total_questions_answered > 0:
@@ -151,6 +174,10 @@ def remove_player(session: Session, ui: ModuleType) -> bool:
 
 
 def view_players(session: Session, ui: ModuleType) -> bool:
+    """Display each player's name, age, and whether they have questions assigned.
+
+    Returns True to stay in the submenu.
+    """
     if session.existing_players:
         for index, player in enumerate(session.existing_players):
             ui.display_attributes_for_object(
@@ -171,6 +198,12 @@ def view_players(session: Session, ui: ModuleType) -> bool:
 
 
 def start_new_run_for_player(session: Session, ui: ModuleType) -> bool:
+    """Generate a fresh question bank for a player and assign it.
+
+    Picks a player (warning if it would overwrite an existing bank), asks for a
+    category and question count, generates the questions via the API, and stores
+    the new bank on the player. Returns True to stay in the submenu.
+    """
     player = _get_user_choice_of_existing_players(session, ui)
     if session.has_qbank(player):
         warning_msg = "Assigning new questions will delete any unanswered questions."
@@ -184,6 +217,10 @@ def start_new_run_for_player(session: Session, ui: ModuleType) -> bool:
 
 
 def generate_question_pdf(session: Session, ui: ModuleType) -> bool:
+    """Build and write a printable barcode PDF for a player's question bank.
+
+    Only players with a bank are selectable. Returns True to stay in the submenu.
+    """
     player = _get_user_choice_of_existing_players(session, ui, filter=session.has_qbank)
     question_bank = session.get_qbank(player)
     generate_pdf(player.name, question_bank.question_id_list(), question_bank.category)
@@ -191,6 +228,10 @@ def generate_question_pdf(session: Session, ui: ModuleType) -> bool:
 
 
 def display_questions_for_player(session: Session, ui: ModuleType) -> bool:
+    """Print every question in a player's bank with its answer and status.
+
+    Only players with a bank are selectable. Returns True to stay in the submenu.
+    """
     player = _get_user_choice_of_existing_players(session, ui, filter=session.has_qbank)
     question_bank = session.get_qbank(player)
     for index, question in enumerate(question_bank.question_list):
@@ -206,6 +247,11 @@ def display_questions_for_player(session: Session, ui: ModuleType) -> bool:
 
 
 def delete_question(session: Session, ui: ModuleType) -> bool:
+    """Pick a question from a player's bank by its text and remove it.
+
+    The user chooses by question text, which is resolved to a unique id before
+    removal. Returns True to stay in the submenu.
+    """
     player = _get_user_choice_of_existing_players(session, ui, filter=session.has_qbank)
     question_bank = session.get_qbank(player)
     question_map = question_bank.question_content_to_id_map()
@@ -217,6 +263,12 @@ def delete_question(session: Session, ui: ModuleType) -> bool:
 
 
 def edit_question_status(session: Session, ui: ModuleType) -> bool:
+    """Change a chosen question's status and adjust the player's score to match.
+
+    Reads the question's old status before reassigning, then calls the player's
+    score adjustment so the all-time tallies stay consistent with the new status.
+    Returns True to stay in the submenu.
+    """
     player = _get_user_choice_of_existing_players(session, ui, filter=session.has_qbank)
     question_bank = session.get_qbank(player)
     question_map = question_bank.question_content_to_id_map()
@@ -234,6 +286,10 @@ def edit_question_status(session: Session, ui: ModuleType) -> bool:
 # ======================
 
 def view_scores(session: Session, ui: ModuleType) -> bool:
+    """Show a player's current-bank score (if any) and their all-time score.
+
+    Returns True to stay in the submenu.
+    """
     player = _get_user_choice_of_existing_players(session, ui)
     if session.has_qbank(player):
         qbank = session.get_qbank(player)
@@ -253,6 +309,10 @@ def view_scores(session: Session, ui: ModuleType) -> bool:
 
 
 def delete_score_history(session: Session, ui: ModuleType) -> bool:
+    """Reset a player's all-time score counters to zero, with a warning first.
+
+    Returns True to stay in the submenu.
+    """
     player = _get_user_choice_of_existing_players(session, ui)
     if player.total_questions_answered > 0:
         warning_msg = f"Deleting score history will delete score history for all questions ever assigned to {player.name}"
@@ -267,6 +327,11 @@ def delete_score_history(session: Session, ui: ModuleType) -> bool:
 # ======================
 
 def _evaluate_answer(question: Question, answer: str, ui: ModuleType, is_ask_answer: bool) -> bool:
+    """Present one question, judge the response, set its status, and return correctness.
+
+    In ask-and-answer mode a parent judges the spoken answer; otherwise the user
+    picks from shuffled multiple choice and the answer is checked automatically.
+    """
     question_content = question.question
     if is_ask_answer:
         is_correct = ui.prompt_ask_answer(question_content, answer)
@@ -279,6 +344,13 @@ def _evaluate_answer(question: Question, answer: str, ui: ModuleType, is_ask_ans
 
 
 def play_game(session: Session, ui: ModuleType, is_ask_answer: bool) -> bool:
+    """Run the scan-driven game loop until the questions run out or the user quits.
+
+    Builds the pool of unanswered questions and an id-to-player lookup, then for
+    each scanned barcode presents the question, records the result on the player,
+    and removes it from the pool. Saves after each scan so a quit ('F', which
+    raises ManualAbort) so quitting loses no progress. Returns True.
+    """
     question_dict = session.eligible_question_id_to_question_dict()
     player_dict = session.all_question_id_to_player_dict()
 

@@ -1,6 +1,9 @@
-"""Return stuctured response from Grok via xAI API for a question bank object 
-with a specified number of question objects contained in it.
-and assign unique identifiers to each question object generated.
+"""Question generation via the xAI (Grok) API.
+
+Calls Grok with structured output to produce a QuestionBank, then stamps each
+question with a unique id. Producing a QuestionBank is this module's whole job,
+so its dependency on that type is expected. On failure it returns an empty
+QuestionBank rather than raising.
 """
 
 from constants import DEBUG
@@ -15,6 +18,12 @@ def generate_questions(
         category: str, run_length: int,
         existing_question_ids: set[str]
     ) -> QuestionBank:
+    """Generate run_length trivia questions for an age bucket and category.
+
+    Asks Grok to return a QuestionBank via structured output, then assigns each
+    question a unique id not already in existing_question_ids. On any API or
+    parsing error, prints a message and returns an empty QuestionBank.
+    """
 
     chat = client.chat.create(model="grok-latest")
 
@@ -31,6 +40,7 @@ def generate_questions(
         response, question_bank = chat.parse(QuestionBank)
         for q in question_bank.question_list:
             q.question_id = generate_unique_id(existing_question_ids)
+            existing_question_ids.add(q.question_id)
     except Exception as e:
         print("Something went wrong with question generation. Please try again")
         if DEBUG: print(e)

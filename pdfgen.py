@@ -18,6 +18,13 @@ import os
 
 
 def generate_pdf(player_name: str, question_id_list: list[str], category: str, filepath: str | None=None) -> str:
+    """Build a printable barcode sheet for one player and write it to disk.
+
+    Lays each question id out as a Code128 barcode in a padded grid with dashed
+    cut lines, labeled with the player name, category, and date. Writes to
+    filepath if it's an existing directory, otherwise to the current directory,
+    and returns the path written.
+    """
     pdf = FPDF(unit=PDF[S.UNIT], format=PDF[S.PAGE_FORMAT])
     pdf.set_margin(PDF[S.PAGE_MARGIN])
     pdf.add_page()
@@ -32,6 +39,7 @@ def generate_pdf(player_name: str, question_id_list: list[str], category: str, f
 
 
 def _add_barcodes(pdf: FPDF, player_name: str, question_id_list: list[str], category: str) -> None:
+    """Place each question's barcode into the two-column grid, paging as needed."""
     cell_h = PDF[S.PAGE_LENGTH]/PDF[S.ROWS]
     text_str = _generate_text_str(player_name, category)
     column1_flag = True
@@ -51,6 +59,11 @@ def _add_barcodes(pdf: FPDF, player_name: str, question_id_list: list[str], cate
 
 
 def _generate_text_str(player_name: str, category: str) -> str:
+    """Build the label printed under each barcode: 'name - category - date'.
+
+    Trims the name and/or category with an ellipsis if the combined label would
+    exceed the barcode's character budget.
+    """
     name_str = player_name
     cat_str = category
     current_date_str = str(date.today().month) + "-" + str(date.today().day)
@@ -75,16 +88,21 @@ def _generate_text_str(player_name: str, category: str) -> str:
 
 
 def _generate_barcode(code: str, text_str: str | None=None) -> Image.Image:
-        img_bytes = BytesIO()
-        Code128(code, ImageWriter()).write(
-            img_bytes,
-            options=PDF[S.IMG_WRITER_OPTIONS],
-            text=text_str
-        )
-        return Image.open(img_bytes)
+    """Render a single Code128 barcode for code as a PIL image, with optional label."""
+    img_bytes = BytesIO()
+    Code128(code, ImageWriter()).write(
+        img_bytes,
+        options=PDF[S.IMG_WRITER_OPTIONS],
+        text=text_str
+    )
+    return Image.open(img_bytes)
 
 
 def _add_whitespace(image: Image.Image) -> Image.Image:
+    """Center the barcode image on a white cell sized to one grid slot.
+
+    Padding the barcode to a fixed cell size keeps the grid evenly spaced.
+    """
     w, h = image.size
     new_w, new_h = (
         int(PDF[S.PAGE_WIDTH]/PDF[S.COLUMNS]*PDF[S.DPI]//1),
@@ -99,6 +117,7 @@ def _add_whitespace(image: Image.Image) -> Image.Image:
 
 
 def _draw_grid(pdf: FPDF) -> None:
+    """Draw the dashed cut lines separating the barcode cells."""
     cell_w = PDF[S.PAGE_WIDTH]/PDF[S.COLUMNS]
     cell_h = PDF[S.PAGE_LENGTH]/PDF[S.ROWS]
     start_w = cell_w

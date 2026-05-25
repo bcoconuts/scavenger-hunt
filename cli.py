@@ -81,7 +81,11 @@ def _construct_prompt_ending(keys: list[str]) -> str:
 
 def greet_user() -> None:
     """Print the welcome banner shown once at program start."""
-    print("Hello! Welcome to The Inquisitor!. Here's how the game works.....")
+    print(
+        "\nWelcome to THE INQUISITOR — a scavenger hunt made of trivia.\n"
+        "Add players, generate their questions, print and hide the barcodes, "
+        "then scan them to play. Find 'em all and answer 'em all.\n"
+    )
 
 
 # ======================
