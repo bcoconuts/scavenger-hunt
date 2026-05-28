@@ -251,7 +251,7 @@ def get_user_int_input(max_choice: int, prompt: str, min_choice: int=1) -> int:
     return response
 
 
-def get_user_str_choice_from_menu(target_dict: dict, numbered: bool=False, header="\nOPTIONS", prompt="What would you like to do?: ") -> str:
+def get_user_str_choice_from_menu(target_dict: dict, numbered: bool=False, header="OPTIONS", prompt="What would you like to do?: ") -> str:
     """Display a menu and return the chosen key as a string.
 
     If numbered is True, target_dict is treated as {number: label} and the chosen
@@ -259,10 +259,10 @@ def get_user_str_choice_from_menu(target_dict: dict, numbered: bool=False, heade
     returned. Re-prompts until a valid number is entered.
     """
     if numbered:
-        display_options_from_numbered_dict(header, target_dict)
+        display_options_from_numbered_dict(f"\n{header}", target_dict)
         new_dict = target_dict
     else:
-        display_options_from_dict(header, target_dict)
+        display_options_from_dict(f"\n{header}", target_dict)
         new_dict = {(index + 1): k for index, k in enumerate(target_dict)}
 
     int_choice = get_key_int_choice_from_dict(prompt, target_dict)
@@ -271,13 +271,13 @@ def get_user_str_choice_from_menu(target_dict: dict, numbered: bool=False, heade
     return str_choice
 
 
-def get_user_value_choice_from_key_menu(target_dict: dict, header="\nOPTIONS", prompt="What would you like to do?: ") -> str:
+def get_user_value_choice_from_key_menu(target_dict: dict, header="OPTIONS", prompt="What would you like to do?: ") -> str:
     """Display a menu of the dict's keys and return the chosen key's value.
 
     Like get_user_str_choice_from_menu, but resolves the selection to the value
     behind it. Used to show questions by text while returning the question_id.
     """
-    display_options_from_dict(header, target_dict)
+    display_options_from_dict(f"\n{header}", target_dict)
     new_dict = {(index + 1): k for index, k in enumerate(target_dict)}
     int_choice = get_key_int_choice_from_dict(prompt, target_dict)
     str_choice = new_dict[int_choice]

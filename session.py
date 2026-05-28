@@ -61,9 +61,10 @@ class Session:
         Returns an empty dict if no players qualify. Used to build a selectable
         menu of players.
         """
+        sorted_players = sorted(self.existing_players, key=lambda p: p.name)
         if filter is None:
-            return {p.name: p for p in self.existing_players}
-        return {p.name: p for p in self.existing_players if filter(p)}
+            return {p.name: p for p in sorted_players}
+        return {p.name: p for p in sorted_players if filter(p)}
     
     def player_name_set(self, filter: Callable[[Player], bool] | None=None) -> set[str]:
         """Return the set of player names, or those matching filter.
