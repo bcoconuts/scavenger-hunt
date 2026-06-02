@@ -31,7 +31,7 @@ def generate_pdf(player_name: str, question_id_list: list[str], category: str, f
     _add_barcodes(pdf, player_name, question_id_list, category)
     _draw_grid(pdf)
     if os.path.isdir(str(filepath)):
-        filepath = f"{filepath}{player_name}{FILE_NAMES[S.PDF_FILE_NAME]}"
+        filepath = os.path.join(str(filepath), f"{player_name}{FILE_NAMES[S.PDF_FILE_NAME]}")
     else:
         filepath = f"{player_name}{FILE_NAMES[S.PDF_FILE_NAME]}"
     pdf.output(filepath)

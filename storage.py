@@ -15,6 +15,7 @@ from models import (
 )
 from session import Session
 import json
+import os
 
 
 def save_session(existing_players: list[Player], player_id_to_qbank_lookup: dict[str, QuestionBank | None]) -> None:
@@ -32,8 +33,12 @@ def save_session(existing_players: list[Player], player_id_to_qbank_lookup: dict
             session_dict[index][S.QBANK] = qbank.model_dump(mode="json")
         else:
             session_dict[index][S.QBANK] = qbank
-    with open(FILE_NAMES[S.PLAYER_FILE_NAME], "w") as f:
+    
+    final = FILE_NAMES[S.PLAYER_FILE_NAME]
+    tmp = final + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(session_dict, f, indent=4)
+    os.replace(tmp, final)
 
 
 def load_session() -> Session:
@@ -54,7 +59,7 @@ def load_session() -> Session:
                     session.player_id_to_question_bank_lookup[player.player_id] = QuestionBank.model_validate(qbank)
                 else:
                     session.player_id_to_question_bank_lookup[player.player_id] = qbank
-    except FileNotFoundError:
+    except (FileNotFoundError, json.JSONDecodeError):
         session = Session()
     
     return session
