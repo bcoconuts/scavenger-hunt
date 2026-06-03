@@ -50,8 +50,7 @@ def _get_user_choice_of_existing_players(session: Session, ui: ModuleType, filte
     if player_dict:
         player_name = ui.get_user_str_choice_from_menu(
             player_dict,
-            header="\nPLAYERS",
-            prompt="Which player would you like to pick?: "
+            header="SELECT PLAYER",
         )
         player = player_dict[player_name]
         return player
@@ -277,7 +276,7 @@ def edit_question_status(session: Session, ui: ModuleType) -> bool:
     question_bank = session.get_qbank(player)
     question_map = question_bank.question_content_to_id_map()
     question_id = ui.get_user_value_choice_from_key_menu(question_map, prompt="Which question ststus would you like to edit?: ")
-    new_status = ui.get_user_str_choice_from_menu(QUESTION_STATUSES, numbered=True, prompt="Which status would you like to select?: ")
+    new_status = ui.get_user_str_choice_from_menu(QUESTION_STATUSES, numbered=True)
     question = question_bank.retrieve_question_by_id(question_id)
     old_status = question.status
     question.status = new_status

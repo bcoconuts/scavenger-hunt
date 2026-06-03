@@ -204,8 +204,7 @@ def prompt_ask_answer(question_content: str, answer: str) -> bool:
 
     Used in ask-and-answer mode, where an adult judges the spoken answer.
     """
-    prompt = "Was the question answered correctly?: "
-    choice = get_user_str_choice_from_menu(YES_NO_DICT, numbered=True, header=f"\n{question_content} [Answer: {answer}]", prompt=prompt)
+    choice = get_user_str_choice_from_menu(YES_NO_DICT, numbered=True, header=f"\n{question_content} [Answer: {answer}]")
     if choice == S.YES:
         return True
     else:
@@ -215,8 +214,7 @@ def prompt_ask_answer(question_content: str, answer: str) -> bool:
 def prompt_multiple_choice_answer(question_content: str, all_answers: list[str]) -> str:
     """Show the question with numbered choices; return the selected answer text."""
     answer_dict = {index + 1: a for index, a in enumerate(all_answers)}
-    prompt = f"What is your answer (1-{len(all_answers)})?: "
-    answer = get_user_str_choice_from_menu(answer_dict, numbered=True, header=f"\n{question_content}", prompt=prompt)
+    answer = get_user_str_choice_from_menu(answer_dict, numbered=True, header=f"\n{question_content}")
     return answer
 
 
@@ -251,13 +249,14 @@ def get_user_int_input(max_choice: int, prompt: str, min_choice: int=1) -> int:
     return response
 
 
-def get_user_str_choice_from_menu(target_dict: dict, numbered: bool=False, header="OPTIONS", prompt="What would you like to do?: ") -> str:
+def get_user_str_choice_from_menu(target_dict: dict, numbered: bool=False, header="OPTIONS") -> str:
     """Display a menu and return the chosen key as a string.
 
     If numbered is True, target_dict is treated as {number: label} and the chosen
     label is returned. Otherwise the dict's keys are listed and the chosen key is
     returned. Re-prompts until a valid number is entered.
     """
+    prompt="Choice?: "
     if numbered:
         display_options_from_numbered_dict(f"\n{header}", target_dict)
         new_dict = target_dict

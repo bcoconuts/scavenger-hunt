@@ -7,10 +7,11 @@ from utils import (
 )
 import pygame
 from pygame import (
-    Surface,  
+    Surface,
+    Rect  
 )
 from pygame.font import Font
-from typing import Union
+from typing import Union, Sequence
 
 # ======================
 # CUSTOM TYPES
@@ -18,7 +19,7 @@ from typing import Union
 
 Coordinate = tuple[int, int]
 RectValue = Union[pygame.Rect, tuple[int, int, int, int], tuple[Coordinate, Coordinate]]
-RenderList = list[tuple[Surface, Union[RectValue, Coordinate]]]
+RenderList = list[tuple[Surface, Union[Rect, Coordinate]]]
 
 
 # ======================
@@ -33,8 +34,8 @@ BUTTON_HEIGHT = 30
 MENU_SCREEN_BUFFER = 100
 GAME_SCREEN_BUFFER = 80
 MENU_BORDER_THICKNESS = 6
-MENU_BOX_EXPANSION_RATE = 60
-MENU_BOX_EMPTY_PAUSE = 1000 #TODO - chnage to reasonable time
+MENU_BOX_EXPANSION_RATE = 20
+MENU_BOX_EMPTY_PAUSE = 100
 BUTTON_HEIGHT_BUFFER = 7
 BUTTON_WIDTH_BUFFER = 30
 VERTICAL_FDL_OFFSET = 25
@@ -47,6 +48,7 @@ VERT_SCROLL_RATE = .75
 HORZ_SCROLL_RATE = .1
 SMALL_VERT_SCROLL_RATE = .5
 SMALL_HORZ_SCROLL_RATE = .5
+
 
 
 # ======================
@@ -77,6 +79,7 @@ class UIDisplay:
             "menu header font": load_font("Fonts/CS Maria Double.otf", MENU_HEADER_FONT_SIZE),
             "menu option font": load_font("Fonts/CS Maria Regular.otf", MENU_OPTION_FONT_SIZE),
         }
+
         self.menu_rect = pygame.Rect(
             (
                 MENU_SCREEN_BUFFER,
@@ -85,8 +88,22 @@ class UIDisplay:
                 SCREEN_HEIGHT - TITLE_BUFFER - MENU_SCREEN_BUFFER * 2 - VERTICAL_FDL_OFFSET
             )
         )
+        self.closed_menu_rect = pygame.Rect(
+            (
+                self.menu_rect.width//2 - MENU_BORDER_THICKNESS,
+                0,
+                MENU_BORDER_THICKNESS*2,
+                MENU_BORDER_THICKNESS*2
+            )
+        )
         self.menu_sect = self.screen.subsurface(self.menu_rect)
+        self.menu_sect.set_clip(self.closed_menu_rect)
         self.menu_offset = self.menu_sect.get_offset()
+        self.menu_size = pygame.Rect((0, 0, 0, 0))
+        self.open_menu = False
+        self.close_menu = False
+        self.menu_is_closed = True
+
         self.game_rect = pygame.Rect(
             (
                 SCREEN_WIDTH//2 + GAME_SCREEN_BUFFER,
@@ -96,7 +113,8 @@ class UIDisplay:
             )
         )
         self.game_sect = self.screen.subsurface(self.game_rect)
-        self.last_menu_surfs: RenderList = []
+
+        self.last_menu_surfs: RenderList = list()
         self.last_game_surfs: RenderList = []
         
         self.scroll_img_height = self.assets["scrolling qs"].get_height()
@@ -108,97 +126,15 @@ class UIDisplay:
         self.scrolling_qs_x_y_pos = x_y
         self.small_scrolling_qs_x_y_pos = list(x_y)
 
-    # ======================
-    # MENU RENDERING
-    # ======================
-
-    def _build_box(self, menu_section_surfs: RenderList | None=None) -> bool:
-
-        destination_clip = self.menu_sect.get_clip()
-        self.menu_sect.set_clip(
-            (
-                self.menu_rect.width//2 - MENU_BORDER_THICKNESS,
-                0,
-                MENU_BORDER_THICKNESS*2,
-                MENU_BORDER_THICKNESS*2
-            )
-        )
-        menu_rect_clip = self.menu_sect.get_clip()
-
-        while menu_rect_clip.height < destination_clip.height:
-            self._render()
-            self._render_menu_surfs(menu_section_surfs)
-            self._menu_box_border(menu_rect_clip)
-            self.menu_sect.set_clip(
-                (
-                    menu_rect_clip.left - 1,
-                    menu_rect_clip.top,
-                    menu_rect_clip.width + 2,
-                    menu_rect_clip.height + 1
-                )
-            )
-            menu_rect_clip = self.menu_sect.get_clip()
-
-            pygame.display.flip()
-            self.clock.tick(60)
-        
-        return True 
-       
-    def _menu_box_border(self, menu_rect_clip) -> None:
-
-        horz_border_surf = self.assets["horz menu box border"]
-        vert_border_surf = self.assets["vert menu box border"]
-
-        top_horz_border_rect = horz_border_surf.get_rect()
-        bottom_horz_border_rect = horz_border_surf.get_rect(bottom=menu_rect_clip.height)
-        left_vert_border_rect = vert_border_surf.get_rect(left=menu_rect_clip.left)
-        right_vert_border_rect = vert_border_surf.get_rect(right=menu_rect_clip.right)
-
-        fdl_tl_surf = self.assets["FDL topleft"]
-        fdl_tr_surf = self.assets["FDL topright"]
-        fdl_bl_surf = self.assets["FDL botleft"]
-        fdl_br_surf = self.assets["FDL botright"]
-
-        fdl_tl_rect = fdl_tl_surf.get_rect(
-            bottomright=(
-                self.menu_offset[0] + menu_rect_clip.topleft[0] + MENU_BORDER_THICKNESS,
-                self.menu_offset[1] + menu_rect_clip.topleft[1] + MENU_BORDER_THICKNESS
-            )
-        )
-        fdl_tr_rect = fdl_tr_surf.get_rect(
-            bottomleft=(
-                self.menu_offset[0] + menu_rect_clip.topright[0] - MENU_BORDER_THICKNESS,
-                self.menu_offset[1] + menu_rect_clip.topright[1] + MENU_BORDER_THICKNESS
-            )
-        )
-        fdl_bl_rect = fdl_bl_surf.get_rect(
-            topright=(
-                self.menu_offset[0] + menu_rect_clip.bottomleft[0] + MENU_BORDER_THICKNESS,
-                self.menu_offset[1] + menu_rect_clip.bottomleft[1] - MENU_BORDER_THICKNESS
-            )
-        )
-        fdl_br_rect = fdl_br_surf.get_rect(
-            topleft=(
-                self.menu_offset[0] + menu_rect_clip.bottomright[0] - MENU_BORDER_THICKNESS,
-                self.menu_offset[1] + menu_rect_clip.bottomright[1] - MENU_BORDER_THICKNESS
-            )
-        )
-    
-        self.menu_sect.blit(horz_border_surf, top_horz_border_rect)
-        self.menu_sect.blit(horz_border_surf, bottom_horz_border_rect)
-        self.menu_sect.blit(vert_border_surf, left_vert_border_rect)
-        self.menu_sect.blit(vert_border_surf, right_vert_border_rect)
-
-        self.screen.blit(fdl_tl_surf, fdl_tl_rect)
-        self.screen.blit(fdl_tr_surf, fdl_tr_rect)
-        self.screen.blit(fdl_bl_surf, fdl_bl_rect)
-        self.screen.blit(fdl_br_surf, fdl_br_rect)
+    @property
+    def pause_until(self) -> int:
+        return pygame.time.get_ticks() + MENU_BOX_EMPTY_PAUSE
 
     # ======================
-    # GENERAL RENDERING
+    # SCREEN PAINTING
     # ======================
 
-    def _scroll_screen(self, surf: Surface, coord_list: list[tuple[float, float]], vert_rate: float, horz_rate: float) -> None:
+    def _update_screen_scroll(self, surf: Surface, coord_list: list[tuple[float, float]], vert_rate: float, horz_rate: float) -> None:
         for index, (x, y) in enumerate(coord_list):
             self.screen.blit(surf, (x, y))
             y += vert_rate
@@ -208,32 +144,138 @@ class UIDisplay:
             if x > SCREEN_WIDTH:
                 x -= self.scroll_img_width * 3
             coord_list[index] = (x, y)
-    
-    def _render_menu_surfs(self, menu_section_surfs: RenderList | None=None) -> None:
-        if menu_section_surfs is not None:
-            menu_box_surf = self.assets["menu box back"]
-            self.menu_sect.blit(menu_box_surf, (0, 0))
-            for (s, r) in menu_section_surfs:
-                self.menu_sect.blit(s, r)
-                self.last_menu_surfs = menu_section_surfs
-        else:
-            for (s, r) in self.last_menu_surfs:
-                self.menu_sect.blit(s, r)
 
-    def _render(self, menu_section_surfs: RenderList | None=None, game_section_surfs: RenderList | None=None) -> None:
-        self._scroll_screen(self.assets["scrolling qs"], self.scrolling_qs_x_y_pos, VERT_SCROLL_RATE, HORZ_SCROLL_RATE)
-        self._scroll_screen(self.assets["small scrolling qs"], self.small_scrolling_qs_x_y_pos, SMALL_VERT_SCROLL_RATE,  SMALL_HORZ_SCROLL_RATE)    
+
+    def _update_screen_scrolls(self) -> None:
+        self._update_screen_scroll(self.assets["scrolling qs"], self.scrolling_qs_x_y_pos, VERT_SCROLL_RATE, HORZ_SCROLL_RATE)
+        self._update_screen_scroll(self.assets["small scrolling qs"], self.small_scrolling_qs_x_y_pos, SMALL_VERT_SCROLL_RATE,  SMALL_HORZ_SCROLL_RATE) 
+
+    def _update_screen_background(self) -> None:
         self.screen.blit(self.assets["background"], (0, 0))
-        self._render_menu_surfs(menu_section_surfs)
+    
+    def _paint_screen(self) -> None:
+        self._update_screen_scrolls()
+        self._update_screen_background()
 
 
-        if game_section_surfs is not None:
-            for (s, r) in game_section_surfs:
-                self.game_sect.blit(s, r)
-                self.last_game_surfs = game_section_surfs
+    # ======================
+    # MENU BOX PAINTING
+    # ======================
+    
+    def _update_menu_sect_background(self) -> None:
+        self.menu_sect.blit(self.assets["menu box back"], (0, 0))
+    
+    def _update_menu_sect_borders(self) -> None:
+        menu_sect_clip = self.menu_sect.get_clip()
+        horz_border_surf = self.assets["horz menu box border"]
+        vert_border_surf = self.assets["vert menu box border"]
+        render_list: RenderList = [
+            (horz_border_surf, horz_border_surf.get_rect()),
+            (horz_border_surf, horz_border_surf.get_rect(bottom=menu_sect_clip.height)),
+            (vert_border_surf, vert_border_surf.get_rect(left=menu_sect_clip.left)),
+            (vert_border_surf, vert_border_surf.get_rect(right=menu_sect_clip.right))
+        ]
+    
+        self.menu_sect.blits(render_list)
+
+    
+    def _update_menu_sect_fdls(self) -> None:
+        menu_sect_clip = self.menu_sect.get_clip()
+        fdl_tl_surf = self.assets["FDL topleft"]
+        fdl_tr_surf = self.assets["FDL topright"]
+        fdl_bl_surf = self.assets["FDL botleft"]
+        fdl_br_surf = self.assets["FDL botright"]
+
+        fdl_tl_rect = fdl_tl_surf.get_rect(
+            bottomright=(
+                self.menu_offset[0] + menu_sect_clip.topleft[0] + MENU_BORDER_THICKNESS,
+                self.menu_offset[1] + menu_sect_clip.topleft[1] + MENU_BORDER_THICKNESS
+            )
+        )
+        fdl_tr_rect = fdl_tr_surf.get_rect(
+            bottomleft=(
+                self.menu_offset[0] + menu_sect_clip.topright[0] - MENU_BORDER_THICKNESS,
+                self.menu_offset[1] + menu_sect_clip.topright[1] + MENU_BORDER_THICKNESS
+            )
+        )
+        fdl_bl_rect = fdl_bl_surf.get_rect(
+            topright=(
+                self.menu_offset[0] + menu_sect_clip.bottomleft[0] + MENU_BORDER_THICKNESS,
+                self.menu_offset[1] + menu_sect_clip.bottomleft[1] - MENU_BORDER_THICKNESS
+            )
+        )
+        fdl_br_rect = fdl_br_surf.get_rect(
+            topleft=(
+                self.menu_offset[0] + menu_sect_clip.bottomright[0] - MENU_BORDER_THICKNESS,
+                self.menu_offset[1] + menu_sect_clip.bottomright[1] - MENU_BORDER_THICKNESS
+            )
+        )
+
+        render_list: RenderList = [
+            (fdl_tl_surf, fdl_tl_rect),
+            (fdl_tr_surf, fdl_tr_rect),
+            (fdl_bl_surf, fdl_bl_rect),
+            (fdl_br_surf, fdl_br_rect)
+        ]
+
+        self.screen.blits(render_list)
+
+    def _open_menu_box(self) -> RenderList | None:
+        menu_sect_clip = self.menu_sect.get_clip()
+        if menu_sect_clip.height < self.menu_size.height:
+            self.menu_sect.set_clip(
+                (
+                    menu_sect_clip.left - MENU_BOX_EXPANSION_RATE,
+                    menu_sect_clip.top,
+                    menu_sect_clip.width + MENU_BOX_EXPANSION_RATE * 2,
+                    menu_sect_clip.height + MENU_BOX_EXPANSION_RATE
+                )
+            )
         else:
-            for (s, r) in self.last_game_surfs:
-                self.game_sect.blit(s, r)
+            self.open_menu = False
+
+    
+    def _close_menu_box(self) -> RenderList | None:
+        menu_sect_clip = self.menu_sect.get_clip()
+        if menu_sect_clip.height > self.closed_menu_rect.height:
+            self.menu_sect.set_clip(
+                (
+                    menu_sect_clip.left + MENU_BOX_EXPANSION_RATE,
+                    menu_sect_clip.top,
+                    menu_sect_clip.width - MENU_BOX_EXPANSION_RATE * 2,
+                    menu_sect_clip.height - MENU_BOX_EXPANSION_RATE
+                )
+            )
+        else:
+            self.close_menu = False
+
+        
+
+
+    # ======================
+    # GENERAL RENDERING
+    # ======================
+    
+    def draw_frame(self, menu_render_list: RenderList | None=None, game_render_list: RenderList | None=None):
+        
+        self._paint_screen()
+        self._update_menu_sect_background()
+
+        if self.open_menu:
+            self._open_menu_box()
+        if self.close_menu:
+            self._close_menu_box()
+        if menu_render_list is not None:
+            self.last_menu_surfs = menu_render_list
+        self.menu_sect.blits(self.last_menu_surfs)
+        self._update_menu_sect_borders()
+        self._update_menu_sect_fdls()
+
+        
+        pygame.display.flip()
+        self.clock.tick(60)
+
+        
 
     
     # ======================
@@ -274,7 +316,7 @@ class UIDisplay:
         
         
         menu_length = len(new_dict)
-        self.menu_sect.set_clip(
+        self.menu_size = pygame.Rect(
             (
                 self.menu_rect.width//2 - max(header_rect.width//2, MENU_BUTTON_WIDTH//2) - BUTTON_WIDTH_BUFFER,
                 0,
@@ -283,10 +325,11 @@ class UIDisplay:
             )
         )
 
-        is_built = False
+        self.open_menu = True
         selection_dict = {i: k for i, k in enumerate(new_dict)}
         selected = 0
-        while True:
+        running = True
+        while running:
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
@@ -297,7 +340,9 @@ class UIDisplay:
                     elif event.key == pygame.K_UP:
                         selected = (selected - 1) % menu_length
                     elif event.key == pygame.K_RETURN:
-                        return selection_dict[selected]
+                        self.close_menu = True
+                        selection = selection_dict[selected]        
+                        running = False
 
             menu_render_list: RenderList = [(header_surf, header_rect)]
             for i, (position, option_surf) in enumerate(position_to_option_text_surfs.items()):
@@ -307,13 +352,15 @@ class UIDisplay:
                 menu_render_list.append((button_surf, button_rect))
                 menu_render_list.append((option_surf, option_rect))
 
+            self.draw_frame(menu_render_list)
+
+        while self.close_menu:
+            self.draw_frame(menu_render_list)
+        wait_time = self.pause_until
+        while pygame.time.get_ticks() < wait_time:
+            self.draw_frame(menu_render_list)
+        return selection
             
-            while not is_built:
-                is_built = self._build_box(menu_render_list)
-            self._render(menu_render_list)
-            
-            pygame.display.flip()
-            self.clock.tick(60)
             
 
 # ======================
