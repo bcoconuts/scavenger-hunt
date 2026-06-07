@@ -34,7 +34,7 @@ BUTTON_HEIGHT = 30
 MENU_SCREEN_BUFFER = 100
 GAME_SCREEN_BUFFER = 80
 MENU_BORDER_THICKNESS = 6
-MENU_BOX_EXPANSION_RATE = 20
+MENU_BOX_EXPANSION_RATE = 10
 MENU_BOX_EMPTY_PAUSE = 100
 BUTTON_HEIGHT_BUFFER = 7
 BUTTON_WIDTH_BUFFER = 30
@@ -100,9 +100,8 @@ class UIDisplay:
         self.menu_sect.set_clip(self.closed_menu_rect)
         self.menu_offset = self.menu_sect.get_offset()
         self.menu_size = pygame.Rect((0, 0, 0, 0))
-        self.open_menu = False
-        self.close_menu = False
-        self.menu_is_closed = True
+        self.open_box = False
+        self.close_box = False
 
         self.game_rect = pygame.Rect(
             (
@@ -220,37 +219,39 @@ class UIDisplay:
 
         self.screen.blits(render_list)
 
-    def _open_menu_box(self) -> RenderList | None:
-        menu_sect_clip = self.menu_sect.get_clip()
-        if menu_sect_clip.height < self.menu_size.height:
-            self.menu_sect.set_clip(
+    def _adjust_box(self, box_surf: Surface, new_rect: Rect) -> bool | None:
+        clip = box_surf.get_clip()
+
+        width_remaining = new_rect.width - clip.width
+        height_remaining = new_rect.height - clip.height
+
+        width_step = max(1, width_remaining/MENU_BOX_EXPANSION_RATE)
+        height_step = max(1, height_remaining/MENU_BOX_EXPANSION_RATE)
+
+        if clip.height != new_rect.height:
+            box_surf.set_clip(
                 (
-                    menu_sect_clip.left - MENU_BOX_EXPANSION_RATE,
-                    menu_sect_clip.top,
-                    menu_sect_clip.width + MENU_BOX_EXPANSION_RATE * 2,
-                    menu_sect_clip.height + MENU_BOX_EXPANSION_RATE
+                    clip.left,
+                    clip.top,
+                    clip.width,
+                    clip.height + height_step
+                )
+            )
+        clip = box_surf.get_clip()
+        if clip.width != new_rect.width:
+            box_surf.set_clip(
+                (
+                    new_rect.left + width_remaining/2,
+                    clip.top,
+                    clip.width + width_step,
+                    clip.height
                 )
             )
         else:
-            self.open_menu = False
-
-    
-    def _close_menu_box(self) -> RenderList | None:
-        menu_sect_clip = self.menu_sect.get_clip()
-        if menu_sect_clip.height > self.closed_menu_rect.height:
-            self.menu_sect.set_clip(
-                (
-                    menu_sect_clip.left + MENU_BOX_EXPANSION_RATE,
-                    menu_sect_clip.top,
-                    menu_sect_clip.width - MENU_BOX_EXPANSION_RATE * 2,
-                    menu_sect_clip.height - MENU_BOX_EXPANSION_RATE
-                )
-            )
-        else:
-            self.close_menu = False
-
-        
-
+            box_surf.set_clip(new_rect)
+            self.open_box = False
+            self.close_box = False
+            
 
     # ======================
     # GENERAL RENDERING
@@ -261,10 +262,10 @@ class UIDisplay:
         self._paint_screen()
         self._update_menu_sect_background()
 
-        if self.open_menu:
-            self._open_menu_box()
-        if self.close_menu:
-            self._close_menu_box()
+        if self.open_box:
+            self._adjust_box(self.menu_sect, self.menu_size)
+        if self.close_box:
+            self._adjust_box(self.menu_sect, self.closed_menu_rect)
         if menu_render_list is not None:
             self.last_menu_surfs = menu_render_list
         self.menu_sect.blits(self.last_menu_surfs)
@@ -325,7 +326,7 @@ class UIDisplay:
             )
         )
 
-        self.open_menu = True
+        self.open_box = True
         selection_dict = {i: k for i, k in enumerate(new_dict)}
         selected = 0
         running = True
@@ -340,7 +341,7 @@ class UIDisplay:
                     elif event.key == pygame.K_UP:
                         selected = (selected - 1) % menu_length
                     elif event.key == pygame.K_RETURN:
-                        self.close_menu = True
+                        self.close_box = True
                         selection = selection_dict[selected]        
                         running = False
 
@@ -354,7 +355,7 @@ class UIDisplay:
 
             self.draw_frame(menu_render_list)
 
-        while self.close_menu:
+        while self.close_box:
             self.draw_frame(menu_render_list)
         wait_time = self.pause_until
         while pygame.time.get_ticks() < wait_time:
