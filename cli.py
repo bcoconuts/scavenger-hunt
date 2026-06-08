@@ -204,7 +204,7 @@ def prompt_ask_answer(question_content: str, answer: str) -> bool:
 
     Used in ask-and-answer mode, where an adult judges the spoken answer.
     """
-    choice = get_user_str_choice_from_menu(YES_NO_DICT, numbered=True, header=f"\n{question_content} [Answer: {answer}]")
+    choice = get_user_str_choice_from_menu({v: v for v in YES_NO_DICT.values()}, header=f"\n{question_content} [Answer: {answer}]")
     if choice == S.YES:
         return True
     else:
@@ -213,8 +213,8 @@ def prompt_ask_answer(question_content: str, answer: str) -> bool:
 
 def prompt_multiple_choice_answer(question_content: str, all_answers: list[str]) -> str:
     """Show the question with numbered choices; return the selected answer text."""
-    answer_dict = {index + 1: a for index, a in enumerate(all_answers)}
-    answer = get_user_str_choice_from_menu(answer_dict, numbered=True, header=f"\n{question_content}")
+    answer_dict = {a: a for a in all_answers}
+    answer = get_user_str_choice_from_menu(answer_dict, header=f"\n{question_content}")
     return answer
 
 
@@ -249,40 +249,20 @@ def get_user_int_input(max_choice: int, prompt: str, min_choice: int=1) -> int:
     return response
 
 
-def get_user_str_choice_from_menu(target_dict: dict, numbered: bool=False, header="OPTIONS") -> str:
+def get_user_str_choice_from_menu(target_dict: dict, header="OPTIONS") -> str:
     """Display a menu and return the chosen key as a string.
 
-    If numbered is True, target_dict is treated as {number: label} and the chosen
-    label is returned. Otherwise the dict's keys are listed and the chosen key is
+    Dict's keys are listed and the chosen key is
     returned. Re-prompts until a valid number is entered.
     """
-    prompt="Choice?: "
-    if numbered:
-        display_options_from_numbered_dict(f"\n{header}", target_dict)
-        new_dict = target_dict
-    else:
-        display_options_from_dict(f"\n{header}", target_dict)
-        new_dict = {(index + 1): k for index, k in enumerate(target_dict)}
+    display_options_from_dict(f"\n{header}", target_dict)
+    new_dict = {(index + 1): k for index, k in enumerate(target_dict)}
 
+    prompt="Choice?: "
     int_choice = get_key_int_choice_from_dict(prompt, target_dict)
     str_choice = new_dict[int_choice]
     
     return str_choice
-
-
-def get_user_value_choice_from_key_menu(target_dict: dict, header="OPTIONS", prompt="What would you like to do?: ") -> str:
-    """Display a menu of the dict's keys and return the chosen key's value.
-
-    Like get_user_str_choice_from_menu, but resolves the selection to the value
-    behind it. Used to show questions by text while returning the question_id.
-    """
-    display_options_from_dict(f"\n{header}", target_dict)
-    new_dict = {(index + 1): k for index, k in enumerate(target_dict)}
-    int_choice = get_key_int_choice_from_dict(prompt, target_dict)
-    str_choice = new_dict[int_choice]
-    value_choice = target_dict[str_choice]
-    
-    return value_choice
 
 
 def warn_user(warning_msg: str) -> bool:

@@ -258,7 +258,8 @@ def delete_question(session: Session, ui: ModuleType) -> bool:
     player = _get_user_choice_of_existing_players(session, ui, filter=session.has_qbank)
     question_bank = session.get_qbank(player)
     question_map = question_bank.question_content_to_id_map()
-    question_id = ui.get_user_value_choice_from_key_menu(question_map, prompt="Which question would you like to select?: ")
+    choice = ui.get_user_str_choice_from_menu(question_map, header="\nSELECT QUESTION")
+    question_id = question_map[choice]
     question = question_bank.retrieve_question_by_id(question_id)
     question_bank.remove_question(question)
     ui.display_msg(f'Question removed.')
@@ -275,8 +276,10 @@ def edit_question_status(session: Session, ui: ModuleType) -> bool:
     player = _get_user_choice_of_existing_players(session, ui, filter=session.has_qbank)
     question_bank = session.get_qbank(player)
     question_map = question_bank.question_content_to_id_map()
-    question_id = ui.get_user_value_choice_from_key_menu(question_map, prompt="Which question ststus would you like to edit?: ")
-    new_status = ui.get_user_str_choice_from_menu(QUESTION_STATUSES, numbered=True)
+    choice = ui.get_user_str_choice_from_menu(question_map, header="\nSELECT QUESTION")
+    question_id = question_map[choice]
+    status_dict = {v: v for v in QUESTION_STATUSES.values()}
+    new_status = ui.get_user_str_choice_from_menu(status_dict, header="\nSELECT NEW STATUS")
     question = question_bank.retrieve_question_by_id(question_id)
     old_status = question.status
     question.status = new_status

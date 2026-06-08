@@ -12,6 +12,7 @@ from pygame import (
 )
 from pygame.font import Font
 from typing import Union, Sequence
+import math
 
 # ======================
 # CUSTOM TYPES
@@ -34,8 +35,9 @@ BUTTON_HEIGHT = 30
 MENU_SCREEN_BUFFER = 100
 GAME_SCREEN_BUFFER = 80
 MENU_BORDER_THICKNESS = 6
-MENU_BOX_EXPANSION_RATE = 10
-MENU_BOX_EMPTY_PAUSE = 100
+MENU_BOX_EXPANSION_RATE = 5
+MENU_BOX_MIN_EXPANSION_RATE = 1
+MENU_BOX_EMPTY_PAUSE = 150
 BUTTON_HEIGHT_BUFFER = 7
 BUTTON_WIDTH_BUFFER = 30
 VERTICAL_FDL_OFFSET = 25
@@ -158,7 +160,7 @@ class UIDisplay:
 
 
     # ======================
-    # MENU BOX PAINTING
+    # MENU PAINTING
     # ======================
     
     def _update_menu_sect_background(self) -> None:
@@ -176,7 +178,6 @@ class UIDisplay:
         ]
     
         self.menu_sect.blits(render_list)
-
     
     def _update_menu_sect_fdls(self) -> None:
         menu_sect_clip = self.menu_sect.get_clip()
@@ -219,39 +220,16 @@ class UIDisplay:
 
         self.screen.blits(render_list)
 
-    def _adjust_box(self, box_surf: Surface, new_rect: Rect) -> bool | None:
-        clip = box_surf.get_clip()
+    def _update_menu(self, position_to_option_text_surfs: dict[Coordinate, Surface], selected: int) -> RenderList:
+        menu_render_list: RenderList | None = []
+        for i, (position, option_surf) in enumerate(position_to_option_text_surfs.items()):
+            option_rect = option_surf.get_rect(center=position)
+            button_surf = self.assets["sel menubox"] if i == selected else self.assets["desel menubox"]
+            button_rect = button_surf.get_rect(center=position)
+            menu_render_list.append((button_surf, button_rect))
+            menu_render_list.append((option_surf, option_rect))
+        return menu_render_list
 
-        width_remaining = new_rect.width - clip.width
-        height_remaining = new_rect.height - clip.height
-
-        width_step = max(1, width_remaining/MENU_BOX_EXPANSION_RATE)
-        height_step = max(1, height_remaining/MENU_BOX_EXPANSION_RATE)
-
-        if clip.height != new_rect.height:
-            box_surf.set_clip(
-                (
-                    clip.left,
-                    clip.top,
-                    clip.width,
-                    clip.height + height_step
-                )
-            )
-        clip = box_surf.get_clip()
-        if clip.width != new_rect.width:
-            box_surf.set_clip(
-                (
-                    new_rect.left + width_remaining/2,
-                    clip.top,
-                    clip.width + width_step,
-                    clip.height
-                )
-            )
-        else:
-            box_surf.set_clip(new_rect)
-            self.open_box = False
-            self.close_box = False
-            
 
     # ======================
     # GENERAL RENDERING
@@ -276,12 +254,44 @@ class UIDisplay:
         pygame.display.flip()
         self.clock.tick(60)
 
-        
-
     
     # ======================
     # CLASS HELPERS
     # ======================
+
+    def _adjust_box(self, box_surf: Surface, new_rect: Rect) -> bool | None:
+        clip = box_surf.get_clip()
+
+        if clip.width == new_rect.width and clip.height == new_rect.height:
+            box_surf.set_clip(new_rect)
+            self.open_box = False
+            self.close_box = False
+            return True
+
+        width_remaining = new_rect.width - clip.width
+        height_remaining = new_rect.height - clip.height
+        
+        width_step = 0
+        height_step = 0
+
+        if clip.width != new_rect.width:
+            width_step = max(MENU_BOX_MIN_EXPANSION_RATE, abs((width_remaining)/MENU_BOX_EXPANSION_RATE))
+            width_step = width_remaining if width_step > abs(width_remaining) else width_step
+            width_step = math.copysign(width_step, width_remaining)
+        
+        if clip.height != new_rect.height:
+            height_step = max(MENU_BOX_MIN_EXPANSION_RATE, abs((height_remaining)/MENU_BOX_EXPANSION_RATE))
+            height_step = height_remaining if height_step > abs(height_remaining) else height_step
+            height_step = math.copysign(height_step, height_remaining)
+        
+        box_surf.set_clip(
+            (
+                round(new_rect.left + width_remaining/2),
+                clip.top,
+                clip.width + width_step,
+                clip.height + height_step
+            )
+        )
 
     def  _get_option_render_info(self, target_iterable, header_height: int) -> tuple[dict[Coordinate, Surface], int]:
         position_to_option_text_surfs = {}
@@ -304,19 +314,15 @@ class UIDisplay:
     # GENERIC I/O
     # ======================
 
-    def get_user_str_choice_from_menu(self, target_dict: dict[str, Any], values: bool=False, header="OPTIONS") -> str:
-        if values:
-            new_dict = target_dict.values()
-        else:
-            new_dict = target_dict
+    def get_user_str_choice_from_menu(self, target_dict: dict[str, Any], header="OPTIONS") -> str:
 
         header_surf = self.fonts["menu header font"].render(header, True, MENU_HEADER_FONT_COLOR)
         header_rect = header_surf.get_rect(midtop=(self.menu_rect.width//2, BUTTON_HEIGHT_BUFFER*2))
         header_height = MENU_HEADER_FONT_SIZE
-        position_to_option_text_surfs, option_y = self._get_option_render_info(new_dict, header_height)
+        position_to_option_text_surfs, option_y = self._get_option_render_info(target_dict, header_height)
         
         
-        menu_length = len(new_dict)
+        menu_length = len(target_dict)
         self.menu_size = pygame.Rect(
             (
                 self.menu_rect.width//2 - max(header_rect.width//2, MENU_BUTTON_WIDTH//2) - BUTTON_WIDTH_BUFFER,
@@ -327,8 +333,9 @@ class UIDisplay:
         )
 
         self.open_box = True
-        selection_dict = {i: k for i, k in enumerate(new_dict)}
+        selection_dict = {i: k for i, k in enumerate(target_dict)}
         selected = 0
+        menu_render_list = self._update_menu(position_to_option_text_surfs, selected) + [(header_surf, header_rect)]
         running = True
         while running:
             for event in pygame.event.get():
@@ -338,20 +345,14 @@ class UIDisplay:
                         exit()
                     elif event.key == pygame.K_DOWN:
                         selected = (selected + 1) % menu_length
+                        menu_render_list = self._update_menu(position_to_option_text_surfs, selected) + [(header_surf, header_rect)]
                     elif event.key == pygame.K_UP:
                         selected = (selected - 1) % menu_length
+                        menu_render_list = self._update_menu(position_to_option_text_surfs, selected) + [(header_surf, header_rect)]
                     elif event.key == pygame.K_RETURN:
                         self.close_box = True
                         selection = selection_dict[selected]        
                         running = False
-
-            menu_render_list: RenderList = [(header_surf, header_rect)]
-            for i, (position, option_surf) in enumerate(position_to_option_text_surfs.items()):
-                option_rect = option_surf.get_rect(center=position)
-                button_surf = self.assets["sel menubox"] if i == selected else self.assets["desel menubox"]
-                button_rect = button_surf.get_rect(center=position)
-                menu_render_list.append((button_surf, button_rect))
-                menu_render_list.append((option_surf, option_rect))
 
             self.draw_frame(menu_render_list)
 
