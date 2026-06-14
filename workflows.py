@@ -26,7 +26,7 @@ from models import (
 from pdfgen import generate_pdf
 from session import Session
 from typing import Callable
-from types import ModuleType
+from ui_protocol import UI
 from xai import generate_questions
 import storage
 
@@ -36,7 +36,7 @@ import storage
 # ======================
 
 
-def _get_user_choice_of_existing_players(session: Session, ui: ModuleType, filter: Callable | None=None) -> Player:
+def _get_user_choice_of_existing_players(session: Session, ui: UI, filter: Callable | None=None) -> Player:
     """Prompt the user to pick a player and return it.
 
     Builds the selectable list from session (optionally filtered, e.g. only
@@ -55,7 +55,7 @@ def _get_user_choice_of_existing_players(session: Session, ui: ModuleType, filte
     raise NoSelection
     
 
-def route_menu_actions(session: Session, ui: ModuleType) -> None:
+def route_menu_actions(session: Session, ui: UI) -> None:
     """Run the main menu loop until the user exits.
 
     Builds the menu-to-action mapping, then repeatedly shows the main menu and,
@@ -125,7 +125,7 @@ def exit():
 # ======================
 
 
-def edit_player(session: Session, ui: ModuleType) -> bool:
+def edit_player(session: Session, ui: UI) -> bool:
     """Pick a player, then collect and apply a new name and birth date.
 
     Mutates the chosen player in place. Returns True to stay in the submenu.
@@ -140,7 +140,7 @@ def edit_player(session: Session, ui: ModuleType) -> bool:
     return True
 
 
-def add_player(session: Session, ui: ModuleType) -> bool:
+def add_player(session: Session, ui: UI) -> bool:
     """Walk the user through collecting a new player's name and birth date.
     Instantiates the player and passes it to Session.
 
@@ -154,7 +154,7 @@ def add_player(session: Session, ui: ModuleType) -> bool:
     return True
 
 
-def remove_player(session: Session, ui: ModuleType) -> bool:
+def remove_player(session: Session, ui: UI) -> bool:
     """Pick a player and delete them from the session.
 
     Warns first if the player has a question bank or score history (a declined
@@ -169,7 +169,7 @@ def remove_player(session: Session, ui: ModuleType) -> bool:
     return True
 
 
-def view_players(session: Session, ui: ModuleType) -> bool:
+def view_players(session: Session, ui: UI) -> bool:
     """Display each player's name, age, and whether they have questions assigned.
 
     Returns True to stay in the submenu.
@@ -193,7 +193,7 @@ def view_players(session: Session, ui: ModuleType) -> bool:
 # ======================
 
 
-def start_new_run_for_player(session: Session, ui: ModuleType) -> bool:
+def start_new_run_for_player(session: Session, ui: UI) -> bool:
     """Generate a fresh question bank for a player and assign it.
 
     Picks a player (warning if it would overwrite an existing bank), asks for a
@@ -216,7 +216,7 @@ def start_new_run_for_player(session: Session, ui: ModuleType) -> bool:
     return True
 
 
-def generate_question_pdf(session: Session, ui: ModuleType) -> bool:
+def generate_question_pdf(session: Session, ui: UI) -> bool:
     """Build and write a printable barcode PDF for a player's question bank.
 
     Only players with a bank are selectable. Returns True to stay in the submenu.
@@ -227,7 +227,7 @@ def generate_question_pdf(session: Session, ui: ModuleType) -> bool:
     return True
 
 
-def display_questions_for_player(session: Session, ui: ModuleType) -> bool:
+def display_questions_for_player(session: Session, ui: UI) -> bool:
     """Print every question in a player's bank with its answer and status.
 
     Only players with a bank are selectable. Returns True to stay in the submenu.
@@ -246,7 +246,7 @@ def display_questions_for_player(session: Session, ui: ModuleType) -> bool:
     return True
 
 
-def delete_question(session: Session, ui: ModuleType) -> bool:
+def delete_question(session: Session, ui: UI) -> bool:
     """Pick a question from a player's bank by its text and remove it.
 
     The user chooses by question text, which is resolved to a unique id before
@@ -263,7 +263,7 @@ def delete_question(session: Session, ui: ModuleType) -> bool:
     return True
 
 
-def edit_question_status(session: Session, ui: ModuleType) -> bool:
+def edit_question_status(session: Session, ui: UI) -> bool:
     """Change a chosen question's status and adjust the player's score to match.
 
     Reads the question's old status before reassigning, then calls the player's
@@ -288,7 +288,7 @@ def edit_question_status(session: Session, ui: ModuleType) -> bool:
 # SCORE MANAGEMENT
 # ======================
 
-def view_scores(session: Session, ui: ModuleType) -> bool:
+def view_scores(session: Session, ui: UI) -> bool:
     """Show a player's current-bank score (if any) and their all-time score.
 
     Returns True to stay in the submenu.
@@ -311,7 +311,7 @@ def view_scores(session: Session, ui: ModuleType) -> bool:
     return True
 
 
-def delete_score_history(session: Session, ui: ModuleType) -> bool:
+def delete_score_history(session: Session, ui: UI) -> bool:
     """Reset a player's all-time score counters to zero, with a warning first.
 
     Returns True to stay in the submenu.
@@ -329,7 +329,7 @@ def delete_score_history(session: Session, ui: ModuleType) -> bool:
 # GAME LOGIC
 # ======================
 
-def _evaluate_answer(question: Question, answer: str, ui: ModuleType, is_ask_answer: bool) -> bool:
+def _evaluate_answer(question: Question, answer: str, ui: UI, is_ask_answer: bool) -> bool:
     """Present one question, judge the response, set its status, and return correctness.
 
     In ask-and-answer mode a parent judges the spoken answer; otherwise the user
@@ -346,7 +346,7 @@ def _evaluate_answer(question: Question, answer: str, ui: ModuleType, is_ask_ans
     return is_correct
 
 
-def play_game(session: Session, ui: ModuleType, is_ask_answer: bool) -> bool:
+def play_game(session: Session, ui: UI, is_ask_answer: bool) -> bool:
     """Run the scan-driven game loop until the questions run out or the user quits.
 
     Builds the pool of unanswered questions and an id-to-player lookup, then for

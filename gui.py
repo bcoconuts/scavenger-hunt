@@ -438,14 +438,13 @@ class UIDisplay:
             option_y += BUTTON_HEIGHT + (BUTTON_HEIGHT_BUFFER * 2)
         return position_to_option_text_surfs, option_y
 
-    def _format_menu_header(self, header: str) -> tuple[Surface, Rect, int]:
-        if self.fonts["menu header font"].size(header)[0] >= self.menu_sect.get_width():
-            pass
+    def _format_menu_header(self, header: str) -> tuple[Surface, Rect]:
+        if self.fonts["menu header font"].size(header)[0] >= self.menu_rect.width - MSG_BUFFER:
+            header_surf = self.fonts["menu option font"].render(header, True, MENU_HEADER_FONT_COLOR, wraplength=(self.menu_rect.width - MENU_SCREEN_BUFFER)) #TODO: pick different font
         else:
             header_surf = self.fonts["menu header font"].render(header, True, MENU_HEADER_FONT_COLOR)
-            header_rect = header_surf.get_rect(midtop=(self.menu_rect.width//2, BUTTON_HEIGHT_BUFFER*2))
-            header_height = SHORT_MENU_HEADER_FONT_SIZE
-        return header_surf, header_rect, header_height
+        header_rect = header_surf.get_rect(midtop=(self.menu_rect.width//2, BUTTON_HEIGHT_BUFFER*2))
+        return header_surf, header_rect
 
 
 
@@ -455,9 +454,9 @@ class UIDisplay:
 
     def get_user_str_choice_from_menu(self, target_dict: dict[str, Any], header="OPTIONS") -> str:
 
-        header_surf, header_rect, header_height = self._format_menu_header(header)
+        header_surf, header_rect = self._format_menu_header(header)
         
-        position_to_option_text_surfs, option_y = self._get_option_render_info(target_dict, header_height)
+        position_to_option_text_surfs, option_y = self._get_option_render_info(target_dict, header_rect.height)
         
         menu_length = len(target_dict)
         self.menu_size = pygame.Rect(
@@ -536,6 +535,9 @@ class UIDisplay:
     def greet_user(self) -> None:
         pass
 
+    def get_player_name(self, existing_names: set[str]) -> str:
+        return("hello")
+
             
 
 # ======================
@@ -548,6 +550,7 @@ def load_image(path: str) -> Surface:
 
 def load_font(path: str, size: int, is_bold: bool=False, is_underlined: bool=False) -> Font:
     font = pygame.font.Font(BASE_IMG_PATH + path, size)
+    font.align = pygame.FONT_CENTER
     if is_bold:
         pygame.font.Font.set_bold(font, True)
     if is_underlined:
@@ -557,49 +560,3 @@ def load_font(path: str, size: int, is_bold: bool=False, is_underlined: bool=Fal
 def back():
     """Menu action: return False to break out of the current submenu loop."""
     return False
-
-
-# ui = UIDisplay()
-
-# main_menu = {
-#     S.ANSWER_QUESTIONS: {
-#         S.MULTIPLE_CHOICE: "lambda: play_game(session, ui, is_ask_answer=False)",
-#         S.ASK_AND_ANSWER: "lambda: play_game(session, ui, is_ask_answer=True)",
-#         S.BACK: back
-#     },
-#     S.MANAGE_PLAYERS: {
-#         S.ADD_PLAYER: lambda: ui.display_msg("No Player Exists"),
-#         S.EDIT_PLAYER: "lambda: edit_player(session, ui)",
-#         S.REMOVE_PLAYER: "lambda: remove_player(session, ui)",
-#         S.VIEW_PLAYERS: "lambda: view_players(session, ui)",
-#         S.BACK: back
-#     },
-#     S.MANAGE_QUESTIONS: {
-#         S.ASSIGN_NEW_QUESTIONS_TO_PLAYER: "lambda: start_new_run_for_player(session, ui)",
-#         S.PRINT_QUESTIONS: "lambda: generate_question_pdf(session, ui)",
-#         S.DISPLAY_QUESTIONS_FOR_PLAYER: "lambda: display_questions_for_player(session, ui)",
-#         S.DELETE_QUESTIONS_FOR_PLAYER: "lambda: delete_question(session, ui)",
-#         S.EDIT_QUESTION_STATUS: "lambda: edit_question_status(session, ui)",
-#         S.BACK: back
-#     },
-#     S.MANAGE_SCORES: {
-#         S.VIEW_SCORES: "lambda: view_scores(session, ui)",
-#         S.DELETE_SCORE_HISTORY: "lambda: delete_score_history(session, ui)",
-#         S.BACK: back
-#     },
-#     S.EXIT: exit,
-# }
-
-# main_running = True
-# while main_running:
-#     choice = ui.get_user_str_choice_from_menu(main_menu, header=S.MAIN_MENU)
-#     if choice == S.EXIT:
-#         main_running = main_menu[choice]()
-#     else:
-#         running = True
-#         while running:
-#             sub_choice = ui.get_user_str_choice_from_menu(main_menu[choice], header=choice)
-#             try:
-#                 running = main_menu[choice][sub_choice]()
-#             except Exception:
-#                 running = True

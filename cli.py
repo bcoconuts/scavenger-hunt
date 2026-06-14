@@ -25,7 +25,7 @@ from utils import (
 # HELPERS
 # ======================
 
-def _format_presented_info(**kwargs: str | int | bool) -> tuple[list[tuple[str, str]], int]:
+def _format_presented_info(**kwargs: str | int | bool | list[str]) -> tuple[list[tuple[str, str]], int]:
     """Returns argument names and values for printing, 
     adjusted onto the colon for the longest argument name.
     return is a tuple of a list of tuples and an int ready for printing
@@ -101,7 +101,7 @@ def display_options_from_dict(header: str, target_dict: dict) -> None:
         print(f"    {index + 1}. {key}")
 
 
-def display_attributes_for_object(header: str, seq_number: int | None=None, **kwargs: str | int | bool) -> None:
+def display_attributes_for_object(header: str, seq_number: int | None=None, **kwargs: str | int | bool | list[str]) -> None:
     """Print a formatted, aligned block of label: value lines under a header.
 
     Labels come from the keyword argument names (underscores become spaces,
@@ -206,17 +206,6 @@ def prompt_multiple_choice_answer(question_content: str, all_answers: list[str])
     answer_dict = {a: a for a in all_answers}
     answer = get_user_str_choice_from_menu(answer_dict, header=f"\n{question_content}")
     return answer
-
-
-def get_key_int_choice_from_dict(prompt: str, target_dict: dict) -> int:
-    """Prompt for an integer in 1..len(target_dict) and return it.
-
-    The valid range is derived from the dict's size, for picking a numbered option.
-    """
-    dict_range = {i for i in range(1, len(target_dict) + 1)}
-    choice = get_valid_int_response(dict_range, prompt)
-
-    return choice
 
 
 # ======================
@@ -328,6 +317,17 @@ def get_valid_int_response(valid_choices: set[int], prompt: str) -> int:
                 return response
         except ValueError:
             print("Invalid Input. Input must an integer only within the range specified. No alphabetical or special chars.")
+
+
+def get_key_int_choice_from_dict(prompt: str, target_dict: dict) -> int:
+    """Prompt for an integer in 1..len(target_dict) and return it.
+
+    The valid range is derived from the dict's size, for picking a numbered option.
+    """
+    dict_range = {i for i in range(1, len(target_dict) + 1)}
+    choice = get_valid_int_response(dict_range, prompt)
+
+    return choice
 
 
 def get_unique_alpha_response(invalid_choices: set, prompt: str, case=str.lower) -> str:

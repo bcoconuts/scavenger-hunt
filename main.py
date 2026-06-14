@@ -3,10 +3,12 @@
 import storage
 import sys
 import workflows
+from ui_protocol import UI
 
 
 def main():
     """Program entry point: pick the UI, load the session, run the menu loop."""
+    ui : UI
     if "--gui" in sys.argv:
         import gui
         ui = gui.UIDisplay()
