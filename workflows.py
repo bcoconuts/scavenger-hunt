@@ -15,6 +15,10 @@ from constants import (
     INTS,
     QUESTION_STATUSES
 )
+from exceptions import (
+    NoSelection,
+    ManualAbort
+)
 from models import (
     Player,
     Question
@@ -25,13 +29,6 @@ from typing import Callable
 from types import ModuleType
 from xai import generate_questions
 import storage
-
-# ======================
-# CUSTOM EXCEPTIONS
-# ======================
-
-class NoSelection(Exception):
-    """Raised when there's nothing for the user to pick."""
 
 
 # ======================
@@ -98,16 +95,16 @@ def route_menu_actions(session: Session, ui: ModuleType) -> None:
     
     main_running = True
     while main_running:
-        choice = ui.get_user_str_choice_from_menu(main_menu, header=f"\n{S.MAIN_MENU}")
+        choice = ui.get_user_str_choice_from_menu(main_menu, header=f"{S.MAIN_MENU}")
         if choice == S.EXIT:
             main_running = main_menu[choice]()
         else:
             running = True
             while running:
-                sub_choice = ui.get_user_str_choice_from_menu(main_menu[choice], header=f"\n{choice}")
+                sub_choice = ui.get_user_str_choice_from_menu(main_menu[choice], header=f"{choice}")
                 try:
                     running = main_menu[choice][sub_choice]()
-                except (NoSelection, ui.ManualAbort):
+                except (NoSelection, ManualAbort):
                     running = True
                 if choice != S.ANSWER_QUESTIONS:
                     storage.save_session(session.existing_players, session.player_id_to_question_bank_lookup)
