@@ -536,7 +536,7 @@ class UIDisplay:
         pass
 
     def get_player_name(self, existing_names: set[str]) -> str:
-        return("hello")
+        pass
 
             
 
